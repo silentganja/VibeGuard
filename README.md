@@ -1,6 +1,6 @@
 # VibeGuard
 
-**CLI-native adversarial local QA daemon** — intercepts `git push`, extracts diffs, analyzes changes via your own LLM, maps endpoints to executable test URLs, and guards your local database against side effects from adversarial payloads.
+**CLI-native adversarial local QA daemon** — intercepts `git push`, enforces code quality standards, extracts diffs, analyzes changes via your own LLM, maps endpoints to executable URLs, guards your database, generates red-team payloads, and fires live HTTP attacks to verify your code can withstand real exploits — all before it leaves your machine.
 
 > **Philosophy:** Your code should not leave your machine until an AI adversary has tried to break it — without touching production, without calling home, without runtime dependencies.
 
@@ -18,6 +18,8 @@
   - [Phase 2 — Noise Filter & LLM Analysis](#phase-2--noise-filter--llm-analysis)
   - [Phase 3 — Target Mapper & Connectivity Check](#phase-3--target-mapper--connectivity-check)
   - [Phase 4 — Database State Guard](#phase-4--database-state-guard)
+  - [Phase 5 — Compliance & Payload Generation](#phase-5--compliance--payload-generation)
+  - [Phase 6 — Live Execution & Response Assertion](#phase-6--live-execution--response-assertion)
 - [Pre-Push Hook Behavior](#pre-push-hook-behavior)
 - [Pipeline Flow](#pipeline-flow)
 - [Project Structure](#project-structure)
@@ -44,13 +46,13 @@
         │                          │                          │
         ▼                          ▼                          ▼
 ┌───────────────┐    ┌───────────────────────┐    ┌─────────────────────┐
-│  Phase 1      │    │  Phase 2              │    │  Phase 3            │
-│  git.ts       │    │  parser.ts → llm.ts   │    │  checker.ts         │
-│               │    │                       │    │  mapper.ts          │
-│ Extract raw   │    │ Strip noise           │    │                     │
-│ git diff from │───▶│ Filter comments/docs  │───▶│ Check server alive  │
-│ remote...HEAD │    │ Send to your LLM      │    │ Resolve file paths  │
-│               │    │ Get intent + vectors  │    │ to executable URLs  │
+│  Phase 5a     │    │  Phase 1+2            │    │  Phase 3            │
+│  compliance.ts│    │  git.ts → parser.ts   │    │  checker.ts         │
+│               │    │  → llm.ts             │    │  mapper.ts          │
+│ README check  │    │                       │    │                     │
+│ Commit lint   │───▶│ Extract diff          │───▶│ Probe dev server    │
+│               │    │ Strip noise           │    │ Resolve file→URL    │
+│ (runs FIRST)  │    │ LLM analysis          │    │ (dual strategy)     │
 └───────────────┘    └───────────────────────┘    └──────────┬──────────┘
                                                              │
                                       ┌──────────────────────┘
@@ -61,14 +63,31 @@
                          │                         │
                          │  Discover SQL tables    │
                          │  Snapshot DB state      │
-                         │  ── [Phase 5/6 TBD] ──  │
-                         │  Restore DB state       │
                          └────────────┬────────────┘
                                       │
                          ┌────────────▼────────────┐
-                         │  Verdict                │
-                         │  Pass (exit 0)          │
-                         │  Block (exit 1)         │
+                         │  Phase 5b + 6           │
+                         │  payloadGen.ts          │
+                         │  runner.ts              │
+                         │  assertion.ts           │
+                         │                         │
+                         │  Generate red-team      │
+                         │  payloads via LLM       │
+                         │  Fire HTTP requests     │
+                         │  (3s timeout, parallel) │
+                         │  Judge responses        │
+                         │  (status, DB leak,      │
+                         │   auth bypass)          │
+                         └────────────┬────────────┘
+                                      │
+                         ┌────────────▼────────────┐
+                         │  Phase 4b + Verdict     │
+                         │                         │
+                         │  Restore DB state       │
+                         │  Combined verdict:      │
+                         │  LLM + live test pass   │
+                         │  → exit 0 (push)        │
+                         │  Any failure → exit 1   │
                          └─────────────────────────┘
 ```
 
@@ -131,13 +150,18 @@ git push
 ```
 
 On every `git push`, VibeGuard will:
-1. Extract the exact diff of what you're about to push.
-2. Strip out non-functional noise (CSS, docs, comments).
-3. Check that your local dev server is running.
-4. Send the critical code changes to your LLM for adversarial analysis.
-5. Resolve modified files to reachable HTTP URLs.
-6. Snapshot your database (if configured).
-7. Report vulnerabilities and either allow or block the push.
+1. Validate your README is current and your commit follows Conventional Commits.
+2. Extract the exact diff of what you're about to push.
+3. Strip out non-functional noise (CSS, docs, comments).
+4. Verify your local dev server is reachable.
+5. Send code changes to your LLM for adversarial analysis (Sovereign System Architect).
+6. Resolve modified files to reachable HTTP URLs (traditional + framework mapping).
+7. Snapshot your database tables (SQLite/MySQL/PostgreSQL).
+8. Generate red-team attack payloads via LLM (with deterministic fallback).
+9. Fire payloads live against your server (parallel, 3s timeout each).
+10. Run security assertions on every response (status code, DB leaks, auth bypass).
+11. Restore your database to its pre-test state.
+12. Report the combined verdict — pass or block the push.
 
 ---
 
@@ -447,6 +471,157 @@ Called **after** test payloads conclude. Reverses all side effects:
 
 If any step in the pipeline throws an unhandled error, the `catch` block in `handleRun` calls `dbGuard.restore()` before exiting. This guarantees the database is never left in a dirty state — even if the LLM times out, the network fails, or a payload crashes the server.
 
+### Phase 5 — Compliance & Payload Generation
+
+**Modules:** [`src/compliance.ts`](src/compliance.ts) · [`src/payloadGen.ts`](src/payloadGen.ts)
+
+#### 5a — Compliance Validator (`src/compliance.ts`)
+
+Runs **at the very start** of the pipeline — before any network calls, LLM API costs, or database changes. Two mandatory checks:
+
+**README Update Check:**
+- Verifies `README.md` exists at the project root.
+- Enforces minimum content length (200 chars).
+- Detects stub/template indicators (`# Project Title`, `TODO`, `[INSERT]`, `tbd`, etc.).
+- Scores for architectural documentation keywords (`architecture`, `pipeline`, `configuration`, `2026`, etc.) — requires ≥ 3 matches.
+- Checks file modification age — flags if > 90 days stale.
+
+**Semantic Commit Check:**
+- Reads the latest commit via `git log -1 --pretty=%B`.
+- Validates against 12 Conventional Commits prefixes: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `revert:`, `security:`.
+- Auto-skips merge commits.
+- Rejects vague descriptions (`"update"`, `"fix"`, `"wip"`, `"tmp"`).
+- Requires ≥ 3 characters of meaningful description after the prefix.
+
+If either check fails, the push is **aborted immediately** with exit code 1 and a high-contrast terminal warning:
+
+```
+✕  Compliance Check Failed
+
+   README Check:   FAILED
+     README.md appears to be a stub or template (contains "# Project Title").
+     Replace with real project documentation.
+
+   Commit Check:   PASSED
+
+   Push blocked — compliance checks must pass before analysis proceeds.
+```
+
+#### 5b — Red-Team Payload Generator (`src/payloadGen.ts`)
+
+Sends the Phase 3 `TargetTargets` + Phase 2 diff context to your LLM with a **Red-Team Security Engineer** system prompt.
+
+**LLM-driven generation:**
+- Requires context-aware payloads — if an endpoint expects `user_uuid`, the payload injects into that specific field: `user_uuid=1' OR '1'='1`.
+- One payload per vulnerability vector per endpoint.
+- Each payload includes `expected_fail_criteria` describing what response indicates a successful breach.
+
+**Response Schema:**
+```json
+{
+  "attack_suite": [
+    {
+      "target_url": "http://localhost:8000/api/login.php",
+      "method": "POST",
+      "attack_type": "sql_injection",
+      "payload_data": {
+        "username": "admin' OR '1'='1",
+        "password": "anything' OR 1=1--"
+      },
+      "expected_fail_criteria": "HTTP 200 with session token — SQL injection bypassed authentication"
+    }
+  ]
+}
+```
+
+**Deterministic Fallback Generator:**
+If the LLM is unreachable or returns unparseable JSON, VibeGuard falls back to a built-in payload library covering all 14 vulnerability vectors with 70+ known attack values:
+
+| Vector | Fallback Payloads |
+|---|---|
+| `sql_injection` | `1' OR '1'='1`, `' UNION SELECT NULL--`, `admin'--` |
+| `auth_bypass` | `admin'--`, `' OR 1=1--`, `admin'#` |
+| `rce` | `; ls -la`, `| whoami`, `$(cat /etc/passwd)` |
+| `xss` | `<script>alert(1)</script>`, `<img src=x onerror=alert(1)>` |
+| `path_traversal` | `../../../etc/passwd`, URL-encoded variants |
+| `ssrf` | `http://169.254.169.254/latest/meta-data/` |
+| … and 8 more | Each with expected failure criteria |
+
+### Phase 6 — Live Execution & Response Assertion
+
+**Modules:** [`src/runner.ts`](src/runner.ts) · [`src/assertion.ts`](src/assertion.ts)
+
+#### 6a — Parallel HTTP Runner (`src/runner.ts`)
+
+Executes the full `attack_suite` against your local dev server.
+
+- **Concurrency:** Up to 8 parallel requests via a worker-pool pattern.
+- **Timeout:** Strict **3-second limit** per payload — aborts if the server hangs.
+- **GET requests:** Payload data serialized into URL query strings via `URLSearchParams`.
+- **POST requests:** Dual content-type handling:
+  - `application/x-www-form-urlencoded` — default for traditional PHP/cPanel stacks.
+  - `application/json` — auto-detected when payload values contain JSON-like structures (`{...}` or `[...]`).
+- Captures first 2000 characters of each response body for signature scanning.
+- Records latency, status code, and response headers per request.
+
+#### 6b — Security Assertion Engine / The Judge (`src/assertion.ts`)
+
+Evaluates every HTTP response against three assertion categories. An endpoint is marked **VULNERABLE** if any assertion triggers:
+
+**1. Status Code Assertion:**
+- HTTP 500 Internal Server Error — unhandled exception triggered by payload.
+- HTTP 502 Bad Gateway — upstream service may have crashed.
+- HTTP 503 Service Unavailable — server may be overloaded.
+
+**2. Database Leak Assertion:**
+Scans response bodies with 25+ regex patterns for raw infrastructure errors:
+- MySQL/MariaDB: `You have an error in your SQL syntax`
+- PDO/PHP: `Fatal error: Uncaught PDOException`, `SQLSTATE[42000]`
+- PostgreSQL: `ERROR: syntax error at`, `pg_query()`
+- SQLite: `SQLITE_ERROR`, `SQLite3::`
+- Laravel: `Illuminate\Database\QueryException`
+- Django: `django.db.utils`, `DatabaseError`
+- Rails: `ActiveRecord::`, `PG::Error`
+- SQLAlchemy: `sqlalchemy.exc.`
+- Stack traces with file paths (`/var/www/`, `C:\xampp\`, `in /.../file.php on line 42`)
+
+**3. Auth Bypass Assertion:**
+An exploit targeting an auth or privilege endpoint returns HTTP 200 with privileged content instead of HTTP 401/403:
+- Admin panel keywords: `admin dashboard`, `welcome back, admin`
+- User data exposure: `username.*password`, `<table>` with user records
+- Session tokens: `access_token`, `session_id` in response
+- Database row dumps: `Array ([id] =>`, `{"id":..., "role":"admin"}`
+- Redirect to admin area: HTTP 302 with `Location: /admin/...`
+
+#### Test Result Display
+
+Each test result is shown with color-coded status:
+
+```
+✕ VULNERABLE  POST http://localhost:8000/api/login.php
+  Attack: sql_injection | HTTP 500 | 42ms
+  [database_leak] Response body contains raw database error — SQL syntax leak.
+
+✓ PASS        GET http://localhost:8000/api/users
+  HTTP 200 | 18ms
+
+! ERROR       POST http://localhost:8000/api/upload
+  Request timed out after 3s. (3012ms)
+```
+
+#### Combined Verdict
+
+The push passes only if **both** the LLM analysis (Phase 2) AND the live test run (Phase 6) report zero vulnerabilities. If either finds issues, the push is blocked:
+
+```
+✕  VibeGuard analysis FAILED — push blocked
+
+   LLM analysis detected high-severity vulnerability vectors.
+   Live tests confirmed 2 vulnerability/ies.
+
+   Review the findings above and fix the issues before pushing.
+```
+
 ---
 
 ## Pre-Push Hook Behavior
@@ -456,7 +631,7 @@ When `vibeguard install` is run, it writes a script to `.git/hooks/pre-push`. On
 1. **Git passes pushed refs** to the hook via stdin (one line per ref: `local_ref local_sha remote_ref remote_sha`).
 2. **The hook parses** each ref to extract branch names.
 3. **The hook invokes** `vibeguard run --local <branch> --remote <branch> --sha <sha>` for each ref.
-4. **VibeGuard runs the full pipeline** (Phases 1–4).
+4. **VibeGuard runs the full pipeline** (Phases 1–6 — compliance, diff, filter, LLM analysis, URL mapping, DB guard, payload generation, live test execution, response assertion, DB restore).
 5. **If VibeGuard exits 0:** The push proceeds.
 6. **If VibeGuard exits 1:** The push is blocked. The developer sees the vulnerability report and must fix the issues.
 
@@ -497,6 +672,14 @@ Developer runs: git push
 │  vibeguard run --local main --remote origin │
 └──────────────────┬──────────────────────────┘
                    │
+                   ▼
+┌─────────────────────────────────────────────┐
+│  PHASE 5a — COMPLIANCE                      │
+│  compliance.ts                              │
+│  README check + commit message lint         │
+│  FAIL → exit 1 (abort immediately)          │
+└──────────────────┬──────────────────────────┘
+                   │
     ┌──────────────┼──────────────┐
     │              │              │
     ▼              ▼              ▼
@@ -506,8 +689,8 @@ Developer runs: git push
 │        │  │ llm.ts     │  │ mapper.ts     │
 │        │  │            │  │               │
 │ Extract│  │ Filter CSS │  │ HEAD → server │
-│ diff   │  │ Strip docs │  │ Resolve URLs  │
-│ from   │──▶│ Send to    │──▶│ Traditional   │
+│ diff   │──▶│ Strip docs │──▶│ Resolve URLs  │
+│ from   │  │ Send to    │  │ Traditional   │
 │ remote │  │ your LLM   │  │ & Framework   │
 │        │  │ Parse JSON │  │ mapping       │
 │        │  │ Build      │  │               │
@@ -516,26 +699,36 @@ Developer runs: git push
                                      │
                           ┌──────────┘
                           │
-                          ▼
-               ┌─────────────────────┐
-               │ PHASE 4             │
-               │ dbGuard.ts          │
-               │                     │
-               │ Discover SQL tables │
-               │ Snapshot DB state   │
-               │ ── [Phase 5/6] ──   │
-               │ Restore DB state    │
-               └──────────┬──────────┘
-                          │
-                          ▼
-               ┌─────────────────────┐
-               │ VERDICT             │
-               │                     │
-               │ Pass (exit 0)       │
-               │   OR                │
-               │ Block (exit 1)      │
-               │ with full report    │
-               └─────────────────────┘
+         ┌────────────────┼────────────────┐
+         │                │                │
+         ▼                ▼                ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ PHASE 4a     │  │ PHASE 5b     │  │ PHASE 6      │
+│ dbGuard.ts   │  │ payloadGen.ts│  │ runner.ts    │
+│              │  │              │  │ assertion.ts │
+│ Snapshot DB  │──▶│ Generate     │──▶│ Fire HTTP    │
+│ (SQLite/     │  │ red-team     │  │ requests     │
+│  MySQL/PG)   │  │ payloads     │  │ (parallel,   │
+│              │  │ via LLM      │  │  3s timeout) │
+│              │  │ (+ fallback) │  │ Judge:       │
+│              │  │              │  │ status code, │
+│              │  │              │  │ DB leak,     │
+│              │  │              │  │ auth bypass  │
+└──────┬───────┘  └──────────────┘  └──────┬───────┘
+       │                                    │
+       │         ┌──────────────────────────┘
+       │         │
+       ▼         ▼
+┌─────────────────────┐
+│ PHASE 4b + VERDICT  │
+│ dbGuard.ts          │
+│                     │
+│ Restore DB state    │
+│ Combined verdict:   │
+│ LLM pass + test     │
+│ pass → exit 0       │
+│ Any fail → exit 1   │
+└─────────────────────┘
 ```
 
 **Fail-closed design:** Any error in the pipeline (LLM timeout, server unreachable, DB snapshot failure) blocks the push and exits with code 1. VibeGuard defaults to safety.
@@ -547,20 +740,26 @@ Developer runs: git push
 ```
 vibe-guard/
 ├── src/
-│   ├── cli.ts          # CLI entry point — argument parsing, command dispatch, pipeline orchestration
+│   ├── cli.ts          # CLI entry point — argument parsing, command dispatch, full 6-phase pipeline orchestration
 │   ├── config.ts       # Configuration manager — read/write/validate .vibeguard.json, init wizard, env-var resolution
-│   ├── types.ts        # Shared type definitions — all interfaces, types, and constants
+│   ├── types.ts        # Shared type definitions — all interfaces, types, and constants for all 6 phases
 │   ├── ui.ts           # Terminal UI — minimalist monochrome output helpers (muted, action, ok, fail, etc.)
 │   │
 │   ├── git.ts          # Phase 1 — Git diff extraction, remote resolution, unified diff parser
 │   │
 │   ├── parser.ts       # Phase 2a — Noise filter, comment stripper, file extension whitelist, token estimator
-│   ├── llm.ts          # Phase 2b — LLM API client (OpenAI/Anthropic/custom), Sovereign System Architect prompt, JSON parser, verdict builder
+│   ├── llm.ts          # Phase 2b — LLM API client (OpenAI/Anthropic/custom), prompts, JSON parser, verdict builder
 │   │
 │   ├── checker.ts      # Phase 3a — Connectivity pre-flight check (1.5s timeout, HEAD→GET fallback)
 │   ├── mapper.ts       # Phase 3b — Dual-strategy route resolution (traditional & framework), TargetTargets builder
 │   │
-│   └── dbGuard.ts      # Phase 4 — Database state guard (SQLite/MySQL/PostgreSQL), table discovery, snapshot capture/restore
+│   ├── dbGuard.ts      # Phase 4 — Database state guard (SQLite/MySQL/PostgreSQL), table discovery, capture/restore
+│   │
+│   ├── compliance.ts   # Phase 5a — Pre-push compliance checks (README validation + Conventional Commits enforcement)
+│   ├── payloadGen.ts   # Phase 5b — Red-team adversarial payload generation via LLM + deterministic fallback
+│   │
+│   ├── runner.ts       # Phase 6a — Parallel HTTP execution engine (8 concurrent, 3s timeout, GET/POST formatting)
+│   └── assertion.ts    # Phase 6b — Security assertion engine (status code, DB leak, auth bypass signature matching)
 │
 ├── dist/               # Compiled JavaScript output (after `npm run build`)
 ├── .vibeguard.json     # Project configuration (created by `vibeguard init`)
@@ -612,6 +811,27 @@ VibeGuard couldn't resolve the remote tracking branch. Ensure:
 - You have a remote configured: `git remote -v`
 - Your branch tracks a remote: `git branch -vv`
 - Set upstream if needed: `git push --set-upstream origin <branch>`
+
+### "Compliance Check Failed"
+
+VibeGuard blocks pushes that don't meet code quality standards.
+
+**README check failed:** Ensure `README.md` exists at the project root with substantive architectural documentation (≥ 200 chars, real content, not a stub/template). Update it to reflect the current codebase state.
+
+**Commit check failed:** Rewrite your commit message to follow Conventional Commits:
+```bash
+# Bad
+git commit -m "update"
+
+# Good
+git commit -m "feat: add user authentication endpoint with JWT session tokens"
+```
+
+Valid prefixes: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `revert:`, `security:`
+
+### "Payload generation failed"
+
+The LLM could not generate payloads. VibeGuard automatically falls back to deterministic payload generation using a built-in library of 70+ attack values. The fallback payloads cover all 14 vulnerability vectors. You'll see `fallbackCount` in the payload generation summary — these are perfectly valid for testing.
 
 ### Database tools not found
 
