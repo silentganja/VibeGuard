@@ -7,3 +7,14 @@ dist/
 .vibeguard.json
 .codegraph/
 .vibeguard/tmp/
+.vibeguard/patches/
+
+# Phase 10: Build artifacts
+dist/vibeguard-*
+sea-config.json
+sea-prep.blob
+*.tgz
+
+# OS files
+.DS_Store
+Thumbs.db

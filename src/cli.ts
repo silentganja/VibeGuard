@@ -31,6 +31,11 @@ import { renderFailureReport, renderSuccessReport, renderPhaseHeader } from "./u
 import { isHeadless, getOutputMode } from "./ci";
 import type { RunArgs, TargetTargets, TestReport, PatchResult } from "./types";
 
+// ─── Version & Build Info ──────────────────────────────────────────────────────
+
+const VERSION = "VibeGuard Engine v1.0.0 (2026)";
+const BUILD_TAG = "Phase 10 · Production Release";
+
 // ─── Help Text ───────────────────────────────────────────────────────────────
 
 const USAGE = `
@@ -46,12 +51,17 @@ ${"\x1b[90m"}Commands:${"\x1b[0m"}
   ${"\x1b[97m"}config${"\x1b[0m"}      Print current configuration
   ${"\x1b[97m"}run${"\x1b[0m"}         [internal] Execute pre-push analysis
 
+${"\x1b[90m"}Options:${"\x1b[0m"}
+  ${"\x1b[97m"}--version, -v${"\x1b[0m"}   Print version and exit
+  ${"\x1b[97m"}--help, -h${"\x1b[0m"}      Show this help text
+
 ${"\x1b[90m"}Examples:${"\x1b[0m"}
   vibeguard init
   vibeguard install
   vibeguard config
+  vibeguard --version
 
-${"\x1b[90m"}Phase 9 · v0.9.0${"\x1b[0m"}
+${"\x1b[90m" + BUILD_TAG + " · " + VERSION + "\x1b[0m"}
 `;
 
 // ─── Argument Parser (zero-dependency) ───────────────────────────────────────
@@ -610,6 +620,19 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
 async function main(): Promise<void> {
   const { command, flags } = parseArgs(process.argv);
 
+  // ── Global flags (before command dispatch) ─────────────────────────
+  // --version / -v always takes precedence.
+  if (command === "--version" || command === "-v" || flags.version || flags.v) {
+    process.stdout.write(VERSION + "\n");
+    process.exit(0);
+  }
+
+  // --help / -h shows usage regardless of command position.
+  if (command === "--help" || command === "-h" || flags.help || flags.h) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+  }
+
   switch (command) {
     case "init":
       await handleInit();
@@ -633,14 +656,12 @@ async function main(): Promise<void> {
 
     case "":
     case "help":
-    case "--help":
-    case "-h":
       process.stdout.write(USAGE);
       break;
 
     default:
       ui.fail(`Unknown command: "${command}"`);
-      ui.muted("Run `vibeguard` without arguments to see usage.");
+      ui.muted("Run `vibeguard --help` to see usage.");
       process.exit(1);
   }
 }
