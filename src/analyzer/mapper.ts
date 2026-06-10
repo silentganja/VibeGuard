@@ -31,11 +31,11 @@ import type {
   FrameworkType,
   HttpMethod,
   VulnerabilityVector,
-} from "./types";
-import { PUBLIC_SUBFOLDER_CANDIDATES } from "./types";
-import { findProjectRoot } from "./config";
+} from "../core/types";
+import { PUBLIC_SUBFOLDER_CANDIDATES } from "../core/types";
+import { findProjectRoot } from "../core/config";
 
-// ─── Framework Detection ────────────────────────────────────────────────────────
+// â”€â”€â”€ Framework Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Framework sentinel files. Order matters - first match wins.
@@ -76,7 +76,7 @@ const NODE_SENTINELS = [
   "package.json",
 ];
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Resolve the LLM's analysis result into a set of executable test targets.
@@ -121,7 +121,7 @@ export function mapTargetsFromAnalysis(
   return mapTargets(config, llmResult, projectRoot);
 }
 
-// ─── Single Endpoint Resolution ─────────────────────────────────────────────────
+// â”€â”€â”€ Single Endpoint Resolution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Resolve a single modified endpoint to an executable test definition.
@@ -151,12 +151,12 @@ function resolveEndpoint(
   let note: string;
 
   if (isFramework && hasReliableRoute) {
-    // ── Framework mapping ──────────────────────────────────────────────
+    // â”€â”€ Framework mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     strategy = "framework";
     resolvedUrl = combineUrl(baseUrl, ep.estimated_route);
     note = `Framework route via ${framework} (estimated by LLM)`;
   } else {
-    // ── Traditional file-to-URL mapping ────────────────────────────────
+    // â”€â”€ Traditional file-to-URL mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     strategy = "traditional";
     const urlPath = filePathToUrlPath(ep.file_path, publicSubfolder, projectRoot);
     resolvedUrl = combineUrl(baseUrl, urlPath);
@@ -193,7 +193,7 @@ function resolveEndpoint(
   };
 }
 
-// ─── Framework Detection ────────────────────────────────────────────────────────
+// â”€â”€â”€ Framework Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Detect the project framework by scanning for sentinel files.
@@ -241,7 +241,7 @@ function detectFramework(projectRoot: string): FrameworkType {
   return "unknown";
 }
 
-// ─── Public Subfolder Detection ─────────────────────────────────────────────────
+// â”€â”€â”€ Public Subfolder Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Detect the public web root subfolder within the project.
@@ -317,7 +317,7 @@ function isWebRoot(dir: string): boolean {
   return false;
 }
 
-// ─── File Path → URL Path Conversion ────────────────────────────────────────────
+// â”€â”€â”€ File Path â†’ URL Path Conversion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Convert a relative file path from the git diff into a URL path.
@@ -329,9 +329,9 @@ function isWebRoot(dir: string): boolean {
  *   3. Map the filesystem path to a forward-slash URL.
  *
  * Examples:
- *   public/api/login.php  →  /api/login.php   (public subfolder stripped)
- *   api/v1/users.php      →  /api/v1/users.php (no public subfolder, root is web root)
- *   src/Controller.php    →  /src/Controller.php (deep source, may trigger fallback)
+ *   public/api/login.php  â†’  /api/login.php   (public subfolder stripped)
+ *   api/v1/users.php      â†’  /api/v1/users.php (no public subfolder, root is web root)
+ *   src/Controller.php    â†’  /src/Controller.php (deep source, may trigger fallback)
  */
 function filePathToUrlPath(
   filePath: string,
@@ -387,16 +387,16 @@ function isDeepSourcePath(filePath: string, publicSubfolder: string | null): boo
   return false;
 }
 
-// ─── URL Helpers ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ URL Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Combine a base URL with a URL path, sanitizing slashes.
  *
  * Examples:
- *   ("http://localhost:8000", "/api/users")  → "http://localhost:8000/api/users"
- *   ("http://localhost:8000/", "api/users")  → "http://localhost:8000/api/users"
- *   ("http://localhost:8000", "/api/users")  → "http://localhost:8000/api/users"
- *   ("http://localhost/my-app", "/api/v1/")  → "http://localhost/my-app/api/v1"
+ *   ("http://localhost:8000", "/api/users")  â†’ "http://localhost:8000/api/users"
+ *   ("http://localhost:8000/", "api/users")  â†’ "http://localhost:8000/api/users"
+ *   ("http://localhost:8000", "/api/users")  â†’ "http://localhost:8000/api/users"
+ *   ("http://localhost/my-app", "/api/v1/")  â†’ "http://localhost/my-app/api/v1"
  */
 function combineUrl(baseUrl: string, urlPath: string): string {
   const base = baseUrl.replace(/\/+$/, "");
@@ -420,7 +420,7 @@ function sanitizeBaseUrl(raw: string): string {
   return url;
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Check if a file exists at projectRoot/filename. */
 function fileExists(projectRoot: string, filename: string): boolean {
@@ -444,7 +444,7 @@ function sanitizeMethod(method: HttpMethod): HttpMethod {
   return method;
 }
 
-// ─── Diagnostics ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Diagnostics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Generate a human-readable summary of the mapping phase.

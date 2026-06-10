@@ -34,7 +34,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");
 const DIST = path.join(ROOT, "dist");
-const SRC_ENTRY = path.join(ROOT, "src", "cli.ts");
+const SRC_ENTRY = path.join(ROOT, "src", "cli", "index.ts");
 
 // ─── Build Configuration ───────────────────────────────────────────────────────
 

@@ -15,7 +15,7 @@
  *   - Response bodies are captured (first 2000 chars) for signature scanning
  *     by the assertion engine.
  *
- * Zero runtime dependencies — uses only Node.js built-in fetch.
+ * Zero runtime dependencies â€” uses only Node.js built-in fetch.
  */
 
 import type {
@@ -24,11 +24,12 @@ import type {
   ExecutionResult,
   AssertionVerdict,
   TestReport,
-} from "./types";
+} from "../core/types";
 import { evaluateResponse, isVulnerable } from "./assertion";
-import * as ui from "./ui";
+import { buildRequest } from "../utils/http";
+import * as ui from "../cli/ui";
 
-// ─── Constants ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Maximum concurrent HTTP requests. */
 const MAX_CONCURRENCY = 8;
@@ -42,7 +43,7 @@ const MAX_RESPONSE_BODY_CHARS = 2_000;
 /** User-agent sent with test requests. */
 const USER_AGENT = "VibeGuard/0.9.0 (adversarial-payload-test)";
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Execute the full attack suite against the local dev server.
@@ -61,7 +62,7 @@ export async function runTests(attackSuite: AttackSuite): Promise<TestReport> {
       testsPassed: 0,
       testsErrored: 0,
       overallPass: true,
-      summary: "No payloads to execute — skipping test run.",
+      summary: "No payloads to execute â€” skipping test run.",
     };
   }
 
@@ -105,7 +106,7 @@ export async function runTests(attackSuite: AttackSuite): Promise<TestReport> {
   };
 }
 
-// ─── Parallel Execution Engine ──────────────────────────────────────────────────
+// â”€â”€â”€ Parallel Execution Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Execute an array of payloads with a concurrency cap.
@@ -139,14 +140,14 @@ async function executeParallel(
   return results;
 }
 
-// ─── Single Payload Execution ───────────────────────────────────────────────────
+// â”€â”€â”€ Single Payload Execution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Execute a single adversarial payload against its target URL.
  *
  * Formats the request based on HTTP method:
- *   GET  → query string parameters
- *   POST → application/x-www-form-urlencoded body
+ *   GET  â†’ query string parameters
+ *   POST â†’ application/x-www-form-urlencoded body
  *
  * Includes a strict timeout and captures response metadata for assertion.
  */
@@ -214,128 +215,7 @@ async function executeOne(payload: AttackPayload): Promise<ExecutionResult> {
   };
 }
 
-// ─── Request Builder ────────────────────────────────────────────────────────────
-
-/**
- * Build the HTTP request URL and init object for a given payload.
- *
- * GET requests serialize payload_data into the query string.
- * POST requests send payload_data as application/x-www-form-urlencoded.
- */
-function buildRequest(
-  payload: AttackPayload
-): { url: string; init: RequestInit } {
-  const paramCount = Object.keys(payload.payload_data).length;
-
-  if (paramCount === 0) {
-    // No parameters — just hit the URL directly.
-    return {
-      url: payload.target_url,
-      init: {
-        method: payload.method,
-        headers: {
-          "User-Agent": USER_AGENT,
-          "Accept": "*/*",
-        },
-        redirect: "manual",
-      },
-    };
-  }
-
-  if (payload.method === "GET") {
-    return buildGetRequest(payload);
-  }
-
-  return buildPostRequest(payload);
-}
-
-/**
- * Build a GET request with payload_data serialized as query parameters.
- *
- * Example:
- *   target_url = "http://localhost:8000/api/users"
- *   payload_data = { user_id: "1' OR '1'='1", role: "admin" }
- *   → "http://localhost:8000/api/users?user_id=1%27+OR+%271%27%3D%271&role=admin"
- */
-function buildGetRequest(
-  payload: AttackPayload
-): { url: string; init: RequestInit } {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(payload.payload_data)) {
-    params.append(key, value);
-  }
-
-  const separator = payload.target_url.includes("?") ? "&" : "?";
-  const url = payload.target_url + separator + params.toString();
-
-  return {
-    url,
-    init: {
-      method: "GET",
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Accept": "*/*",
-      },
-      redirect: "manual",
-    },
-  };
-}
-
-/**
- * Build a POST request with payload_data as form-urlencoded.
- *
- * Traditional PHP/cPanel stacks expect form-encoded POST bodies.
- * JSON Content-Type is also common for modern frameworks — we use
- * form-urlencoded as the default since it's the superset compatibility
- * choice, but detect JSON-like values and switch accordingly.
- */
-function buildPostRequest(
-  payload: AttackPayload
-): { url: string; init: RequestInit } {
-  // Detect if the payload data looks like JSON (contains nested structures
-  // or JSON-specific values like {"key": "value"}).
-  const looksLikeJson = Object.values(payload.payload_data).some(
-    (v) => (v.trim().startsWith("{") && v.trim().endsWith("}")) ||
-           (v.trim().startsWith("[") && v.trim().endsWith("]"))
-  );
-
-  let body: string;
-  let contentType: string;
-
-  if (looksLikeJson) {
-    // Build a JSON body from the payload data.
-    const obj: Record<string, string> = {};
-    for (const [key, value] of Object.entries(payload.payload_data)) {
-      obj[key] = value;
-    }
-    body = JSON.stringify(obj);
-    contentType = "application/json";
-  } else {
-    // Standard form-urlencoded.
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(payload.payload_data)) {
-      params.append(key, value);
-    }
-    body = params.toString();
-    contentType = "application/x-www-form-urlencoded";
-  }
-
-  return {
-    url: payload.target_url,
-    init: {
-      method: "POST",
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Accept": "*/*",
-        "Content-Type": contentType,
-      },
-      body,
-      redirect: "manual",
-    },
-  };
-}
-
-// ─── Summary Builder ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Summary Builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function buildSummary(
   results: ExecutionResult[],
@@ -354,7 +234,7 @@ function buildSummary(
 
   if (overallPass) {
     lines.push(
-      "Result: ALL TESTS PASSED — no vulnerabilities confirmed."
+      "Result: ALL TESTS PASSED â€” no vulnerabilities confirmed."
     );
     lines.push(
       "  Passed: " + String(testsPassed) +
@@ -363,7 +243,7 @@ function buildSummary(
     );
   } else {
     lines.push(
-      "Result: VULNERABILITIES FOUND — " +
+      "Result: VULNERABILITIES FOUND â€” " +
       String(vulnerabilitiesFound) + " test(s) confirmed security issues."
     );
     lines.push(
@@ -405,7 +285,7 @@ function buildSummary(
       if (r.completed) continue;
       lines.push(
         "  > " + r.payload.method + " " + r.payload.target_url +
-        " — " + (r.error ?? "Unknown error")
+        " â€” " + (r.error ?? "Unknown error")
       );
     }
   }

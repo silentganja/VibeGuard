@@ -1,22 +1,22 @@
 /**
- * VibeGuard — Git Diff Extractor
+ * VibeGuard â€” Git Diff Extractor
  *
  * Core engine that runs when the pre-push hook fires. Extracts the exact
  * code changes about to be pushed and parses them into a structured memory
  * footprint ready for LLM consumption (Phase 2).
  *
  * Operations:
- *   · Resolves the remote tracking branch for the current local branch.
- *   · Runs `git diff <remote>...HEAD` to get the changes being pushed.
- *   · Parses the unified diff into structured DiffFile / DiffHunk / DiffLine objects.
- *   · Respects `.vibeguard.json` exclude_paths.
+ *   Â· Resolves the remote tracking branch for the current local branch.
+ *   Â· Runs `git diff <remote>...HEAD` to get the changes being pushed.
+ *   Â· Parses the unified diff into structured DiffFile / DiffHunk / DiffLine objects.
+ *   Â· Respects `.vibeguard.json` exclude_paths.
  */
 
 import { execSync } from "node:child_process";
-import type { DiffResult, DiffFile, DiffHunk, DiffLine, FileStatus } from "./types";
-import { readConfig } from "./config";
+import type { DiffResult, DiffFile, DiffHunk, DiffLine, FileStatus } from "../core/types";
+import { readConfig } from "../core/config";
 
-// ─── Low-level Git Commands ──────────────────────────────────────────────────
+// â”€â”€â”€ Low-level Git Commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Run a git command and return trimmed stdout.
@@ -28,7 +28,7 @@ function git(args: string[], cwd?: string): string {
       cwd: cwd ?? process.cwd(),
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
-      maxBuffer: 50 * 1024 * 1024, // 50 MB — generous for large diffs
+      maxBuffer: 50 * 1024 * 1024, // 50 MB â€” generous for large diffs
     });
     return result.trim();
   } catch (err: unknown) {
@@ -39,7 +39,7 @@ function git(args: string[], cwd?: string): string {
 
 /**
  * Get the remote tracking branch for the given local branch.
- * Example: "main" → "origin/main"
+ * Example: "main" â†’ "origin/main"
  * Returns null if no upstream is configured.
  */
 function getUpstream(localBranch: string): string | null {
@@ -47,7 +47,7 @@ function getUpstream(localBranch: string): string | null {
     const upstream = git(["rev-parse", "--abbrev-ref", `${localBranch}@{u}`]);
     return upstream || null;
   } catch {
-    // No upstream configured — fall back to origin/<branch>
+    // No upstream configured â€” fall back to origin/<branch>
     return `origin/${localBranch}`;
   }
 }
@@ -56,7 +56,7 @@ function getUpstream(localBranch: string): string | null {
  * Run the diff between the remote tracking branch and HEAD.
  *
  * Uses the three-dot syntax `<remote>...HEAD` which shows changes on the
- * local branch since it diverged from the remote — this is exactly the set
+ * local branch since it diverged from the remote â€” this is exactly the set
  * of changes about to be pushed, excluding anything already on the remote.
  */
 function runDiff(upstream: string, excludePaths: string[]): string {
@@ -73,16 +73,16 @@ function runDiff(upstream: string, excludePaths: string[]): string {
   return git(args);
 }
 
-// ─── Diff Parser ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Diff Parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Parse a unified diff string into a structured DiffResult.
  *
  * Handles:
- *   · File headers: diff --git a/X b/Y
- *   · Extended headers: new file mode, deleted file mode, rename from/to
- *   · Hunks: @@ -oldStart,oldCount +newStart,newCount @@ context
- *   · Lines: +additions, -deletions, context
+ *   Â· File headers: diff --git a/X b/Y
+ *   Â· Extended headers: new file mode, deleted file mode, rename from/to
+ *   Â· Hunks: @@ -oldStart,oldCount +newStart,newCount @@ context
+ *   Â· Lines: +additions, -deletions, context
  */
 function parseDiff(raw: string): DiffResult {
   const files: DiffFile[] = [];
@@ -238,13 +238,13 @@ function parseDiff(raw: string): DiffResult {
   };
 }
 
-// ─── Public API ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Extract the full structured diff for a branch about to be pushed.
  *
- * @param localBranch  — the local branch name (e.g. "feature/login")
- * @param excludePaths — optional override for exclude_paths from config
+ * @param localBranch  â€” the local branch name (e.g. "feature/login")
+ * @param excludePaths â€” optional override for exclude_paths from config
  */
 export function extractDiff(
   localBranch: string,
@@ -264,7 +264,7 @@ export function extractDiff(
   const raw = runDiff(upstream, excludes);
 
   if (!raw) {
-    // No diff — nothing to push (or identical to remote)
+    // No diff â€” nothing to push (or identical to remote)
     return {
       files: [],
       totalAdditions: 0,

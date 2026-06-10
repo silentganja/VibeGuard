@@ -47,7 +47,7 @@ if (major < 18) {
 }
 
 // ── Entry Point Exists ───────────────────────────────────────────────
-const entryPoint = path.join(DIST, "cli.js");
+const entryPoint = path.join(DIST, "cli", "index.js");
 if (!fs.existsSync(entryPoint)) {
   warn(`Entry point not found at ${entryPoint}`);
   warn("  Run `npm run build` to compile TypeScript.");

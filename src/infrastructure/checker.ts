@@ -15,9 +15,9 @@
  *   - Handles DNS failures, connection refused, timeouts, and non-2xx responses.
  */
 
-import type { VibeGuardConfig, ServerCheckResult } from "./types";
+import type { VibeGuardConfig, ServerCheckResult } from "../core/types";
 
-// ─── Constants ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Maximum time to wait for the server to respond (milliseconds). */
 const CHECK_TIMEOUT_MS = 1500;
@@ -25,7 +25,7 @@ const CHECK_TIMEOUT_MS = 1500;
 /** HTTP user-agent string sent with the probe request. */
 const USER_AGENT = "VibeGuard/0.9.0 (pre-push connectivity check)";
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Probe the target local dev server and return a detailed status.
@@ -87,7 +87,7 @@ export async function checkServer(config: VibeGuardConfig): Promise<ServerCheckR
   };
 }
 
-// ─── Internal Helpers ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Internal Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface ProbeResult {
   reachable: boolean;

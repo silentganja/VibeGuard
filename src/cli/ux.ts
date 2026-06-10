@@ -1,23 +1,23 @@
 /**
- * VibeGuard — Terminal UX & Presentation Engine
+ * VibeGuard â€” Terminal UX & Presentation Engine
  *
  * Phase 8: Builds high-contrast, minimalist terminal reports on top of the
  * low-level ui.ts primitives. Implements structured layouts for:
  *
- *   · Section dividers with optional labels
- *   · Aligned key-value tables
- *   · Threat cards (vulnerability details)
- *   · Patch cards (Phase 7 remediation)
- *   · Failure report (blocked push — full forensic display)
- *   · Success shield (passed push — minimalist confirmation)
+ *   Â· Section dividers with optional labels
+ *   Â· Aligned key-value tables
+ *   Â· Threat cards (vulnerability details)
+ *   Â· Patch cards (Phase 7 remediation)
+ *   Â· Failure report (blocked push â€” full forensic display)
+ *   Â· Success shield (passed push â€” minimalist confirmation)
  *
  * Design language:
- *   · White/bold     — headers, severity labels, primary actions
- *   · Muted gray     — file paths, metadata, secondary info
- *   · Red            — vulnerability warnings, blocked status, attack vectors
- *   · Green          — success confirmation, patches
- *   · Yellow         — warnings, errors
- *   · Cyan           — HTTP methods, URLs
+ *   Â· White/bold     â€” headers, severity labels, primary actions
+ *   Â· Muted gray     â€” file paths, metadata, secondary info
+ *   Â· Red            â€” vulnerability warnings, blocked status, attack vectors
+ *   Â· Green          â€” success confirmation, patches
+ *   Â· Yellow         â€” warnings, errors
+ *   Â· Cyan           â€” HTTP methods, URLs
  *
  * All output uses standard ANSI escape codes. No box-drawing Unicode that
  * might break in restricted SSH or VS Code terminal sessions.
@@ -29,10 +29,10 @@ import type {
   ExecutionResult,
   PatchResult,
   VulnerabilityVector,
-} from "./types";
-import { getOutputMode, detectCIPlatform } from "./ci";
+} from "../core/types";
+import { getOutputMode, detectCIPlatform } from "../compliance/ci";
 
-// ─── ANSI Style Constants ──────────────────────────────────────────────────────
+// â”€â”€â”€ ANSI Style Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const BOLD = "\x1b[1m";
 const DIM = "\x1b[2m";
@@ -44,10 +44,10 @@ const YELLOW = "\x1b[33m";
 const CYAN = "\x1b[36m";
 const R = "\x1b[0m";
 
-/** Terminal width — clamped to a safe maximum for readability. */
+/** Terminal width â€” clamped to a safe maximum for readability. */
 const TERM_WIDTH = Math.min(process.stdout.columns ?? 80, 100);
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Render the full failure report when a push is blocked.
@@ -78,17 +78,17 @@ export function renderFailureReport(
   const vulnerableResults = testReport.results.filter((r) => r.vulnerable);
   const successPatches = patchResults.filter((p) => p.success);
 
-  // ── Blocked Banner ──────────────────────────────────────────────────
+  // â”€â”€ Blocked Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   write("");
   write(divider());
   write(
     BOLD + WHITE + "  PUSH BLOCKED" + R +
-    GRAY + " — Security Vulnerability Detected" + R
+    GRAY + " â€” Security Vulnerability Detected" + R
   );
   write(divider());
   write("");
 
-  // ── Pre-failure context ─────────────────────────────────────────────
+  // â”€â”€ Pre-failure context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!analysisPassed) {
     write(
       GRAY + "  " + BOLD + "LLM Analysis:" + R +
@@ -107,7 +107,7 @@ export function renderFailureReport(
 
   write("");
 
-  // ── Threat Cards ────────────────────────────────────────────────────
+  // â”€â”€ Threat Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   for (let i = 0; i < vulnerableResults.length; i++) {
     const vr = vulnerableResults[i];
     const threatNum = i + 1;
@@ -126,7 +126,7 @@ export function renderFailureReport(
     write("");
   }
 
-  // ── Patch Summary ───────────────────────────────────────────────────
+  // â”€â”€ Patch Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (successPatches.length > 0) {
     write(divider("Remediation Available"));
     write("");
@@ -145,7 +145,7 @@ export function renderFailureReport(
     write(divider());
   }
 
-  // ── Footer ──────────────────────────────────────────────────────────
+  // â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   write("");
   write(
     GRAY + "  Result:" + R +
@@ -171,7 +171,7 @@ export function renderFailureReport(
 /**
  * Render the minimalist success confirmation when all checks pass.
  *
- * Keeps the footprint tiny — the user's focus returns instantly to the
+ * Keeps the footprint tiny â€” the user's focus returns instantly to the
  * native git push stream.
  */
 export function renderSuccessReport(): void {
@@ -186,9 +186,9 @@ export function renderSuccessReport(): void {
     BOLD + WHITE + divider() + R
   );
   write(
-    "  " + GREEN + BOLD + "✓" + R +
+    "  " + GREEN + BOLD + "âœ“" + R +
     "  " + WHITE + "VibeGuard" + R +
-    GRAY + " · All security checks passed · push allowed" + R
+    GRAY + " Â· All security checks passed Â· push allowed" + R
   );
   write(
     BOLD + WHITE + divider() + R
@@ -196,17 +196,17 @@ export function renderSuccessReport(): void {
   write("");
 }
 
-// ─── CI/CD Machine-Readable Reports ────────────────────────────────────────────
+// â”€â”€â”€ CI/CD Machine-Readable Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Render a machine-readable failure report for CI/CD pipeline logs.
  *
  * Outputs a clean, parseable text breakdown of every vulnerability.
- * No ANSI colors, no box drawing — plain text suitable for log archival,
+ * No ANSI colors, no box drawing â€” plain text suitable for log archival,
  * grep filtering, and CI pipeline log viewers.
  *
  * Format:
- *   [VibeGuard] PUSH BLOCKED — 2 vulnerability/ies confirmed
+ *   [VibeGuard] PUSH BLOCKED â€” 2 vulnerability/ies confirmed
  *   [VibeGuard] Platform: GitHub Actions
  *   [VibeGuard]
  *   [VibeGuard] THREAT 1/2 | sql_injection | HIGH
@@ -216,7 +216,7 @@ export function renderSuccessReport(): void {
  *   [VibeGuard]   Signature: You have an error in your SQL syntax...
  *   [VibeGuard]   Status:  500 | 42ms
  *   [VibeGuard]
- *   [VibeGuard] RESULT: 2 vulnerability/ies found — build failed
+ *   [VibeGuard] RESULT: 2 vulnerability/ies found â€” build failed
  */
 function renderFailureReportCI(
   verdict: AnalysisVerdict,
@@ -228,8 +228,8 @@ function renderFailureReportCI(
   const platform = detectCIPlatform() ?? "CI/CD";
   const successPatches = patchResults.filter((p) => p.success);
 
-  // ── Header ──────────────────────────────────────────────────────────
-  writePlain("[VibeGuard] PUSH BLOCKED — " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies confirmed");
+  // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  writePlain("[VibeGuard] PUSH BLOCKED â€” " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies confirmed");
   writePlain("[VibeGuard] Platform: " + platform);
   writePlain("[VibeGuard]");
 
@@ -240,7 +240,7 @@ function renderFailureReportCI(
   writePlain("[VibeGuard] Live Tests: " + String(testReport.vulnerabilitiesFound) + " payload(s) confirmed exploitable.");
   writePlain("[VibeGuard]");
 
-  // ── Threat Cards ────────────────────────────────────────────────────
+  // â”€â”€ Threat Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   for (let i = 0; i < vulnerableResults.length; i++) {
     const vr = vulnerableResults[i];
     const severity = vectorSeverityLabel(vr.payload.attack_type);
@@ -298,7 +298,7 @@ function renderFailureReportCI(
     writePlain("[VibeGuard]");
   }
 
-  // ── Patch Summary ───────────────────────────────────────────────────
+  // â”€â”€ Patch Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (successPatches.length > 0) {
     writePlain("[VibeGuard] PATCHES: " + String(successPatches.length) + " generated in .vibeguard/patches/");
     for (const p of successPatches) {
@@ -307,34 +307,34 @@ function renderFailureReportCI(
     writePlain("[VibeGuard]");
   }
 
-  // ── Result ──────────────────────────────────────────────────────────
-  writePlain("[VibeGuard] RESULT: " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies found — build failed");
+  // â”€â”€ Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  writePlain("[VibeGuard] RESULT: " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies found â€” build failed");
   writePlain("[VibeGuard] " + String(testReport.testsPassed) + " passed | " + String(testReport.testsErrored) + " errored | " + String(testReport.vulnerabilitiesFound) + " vulnerable");
 }
 
 /**
  * Render a machine-readable success message for CI/CD pipeline logs.
  *
- * Minimal — one line confirming the security scan passed.
+ * Minimal â€” one line confirming the security scan passed.
  */
 function renderSuccessReportCI(): void {
-  writePlain("[VibeGuard] PASS — All security checks passed.");
+  writePlain("[VibeGuard] PASS â€” All security checks passed.");
 }
 
-// ─── Threat Card ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Threat Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Render a single threat card showing the forensic details of a confirmed
  * vulnerability.
  *
  * Layout:
- *   Threat #N/TOTAL  ·  VECTOR  ·  SEVERITY
- *   ─────────────────────────────────────────
+ *   Threat #N/TOTAL  Â·  VECTOR  Â·  SEVERITY
+ *   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  *     File:       path/to/file.ext
  *     Endpoint:   METHOD http://...
  *     Payload:    key=malicious_value
  *     Signature:  matched error pattern
- *     Verdict:    VULNERABLE · HTTP 500 · 42ms
+ *     Verdict:    VULNERABLE Â· HTTP 500 Â· 42ms
  */
 function renderThreatCard(
   vr: ExecutionResult,
@@ -347,17 +347,17 @@ function renderThreatCard(
   // Find the primary triggered assertion.
   const triggered = vr.assertions.find((a) => a.triggered);
 
-  // ── Card Header ────────────────────────────────────────────────────
+  // â”€â”€ Card Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   write(
     "  " + BOLD + WHITE + "Threat #" + String(num) + "/" + String(total) + R +
-    GRAY + "  ·  " + R +
+    GRAY + "  Â·  " + R +
     RED + vr.payload.attack_type + R +
-    GRAY + "  ·  " + R +
+    GRAY + "  Â·  " + R +
     sevColor + BOLD + severity + R
   );
-  write(GRAY + "  " + "─".repeat(Math.min(TERM_WIDTH - 4, 74)) + R);
+  write(GRAY + "  " + "â”€".repeat(Math.min(TERM_WIDTH - 4, 74)) + R);
 
-  // ── Card Body ──────────────────────────────────────────────────────
+  // â”€â”€ Card Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // File path
   write(
     GRAY + "    File:" + R +
@@ -411,7 +411,7 @@ function renderThreatCard(
   write(
     GRAY + "    Verdict:" + R +
     "    " + RED + BOLD + "VULNERABLE" + R +
-    GRAY + " · HTTP " + statusCode + " · " + String(vr.latencyMs) + "ms" + R
+    GRAY + " Â· HTTP " + statusCode + " Â· " + String(vr.latencyMs) + "ms" + R
   );
 
   // Additional assertion details.
@@ -428,25 +428,25 @@ function renderThreatCard(
   }
 }
 
-// ─── Patch Card ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Patch Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Render a patch card showing the Phase 7 remediation details beneath its
  * associated threat card.
  *
  * Layout:
- *   ── Patch ────────────────────────────────────
- *     ✓  .vibeguard/patches/file.patch
+ *   â”€â”€ Patch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+ *     âœ“  .vibeguard/patches/file.patch
  *        Explanation of the fix.
  *        Review:  cat ...
  *        Apply:   git apply ...
  */
 function renderPatchCard(patch: PatchResult): void {
   write("");
-  write(GRAY + "  " + "─".repeat(Math.min(TERM_WIDTH - 4, 36)) + " Patch " + "─".repeat(Math.min(TERM_WIDTH - 4, 34)) + R);
+  write(GRAY + "  " + "â”€".repeat(Math.min(TERM_WIDTH - 4, 36)) + " Patch " + "â”€".repeat(Math.min(TERM_WIDTH - 4, 34)) + R);
   write("");
   write(
-    "    " + GREEN + BOLD + "✓" + R +
+    "    " + GREEN + BOLD + "âœ“" + R +
     "  " + WHITE + (patch.patchPath ?? "unknown") + R
   );
   write("");
@@ -474,7 +474,7 @@ function renderPatchCard(patch: PatchResult): void {
   write(GRAY + "       Apply:" + R + "   git apply " + (patch.patchPath ?? ".vibeguard/patches/<file>.patch"));
 }
 
-// ─── Section Divider ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Section Divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Render a horizontal section divider, optionally with a centered label.
@@ -483,8 +483,8 @@ function renderPatchCard(patch: PatchResult): void {
  * When a label is given, the label is centered within the rule.
  *
  * Examples:
- *   ────────────────────────────────────────────
- *   ─────────────── Section Name ───────────────
+ *   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+ *   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Section Name â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  *
  * @param label - Optional text to center within the divider.
  */
@@ -492,7 +492,7 @@ function divider(label?: string): string {
   const width = Math.min(TERM_WIDTH, 80);
 
   if (!label) {
-    return GRAY + DIM + "─".repeat(width) + R;
+    return GRAY + DIM + "â”€".repeat(width) + R;
   }
 
   const labelText = " " + label + " ";
@@ -501,13 +501,13 @@ function divider(label?: string): string {
   const rightPad = remaining - leftPad;
 
   return (
-    GRAY + DIM + "─".repeat(Math.max(leftPad, 0)) + R +
+    GRAY + DIM + "â”€".repeat(Math.max(leftPad, 0)) + R +
     WHITE + labelText + R +
-    GRAY + DIM + "─".repeat(Math.max(rightPad, 0)) + R
+    GRAY + DIM + "â”€".repeat(Math.max(rightPad, 0)) + R
   );
 }
 
-// ─── Key-Value Table ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Key-Value Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Render an aligned key-value table.
@@ -540,13 +540,13 @@ export function renderKeyValueTable(
   }
 }
 
-// ─── Phase Header ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Phase Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Render a phase section header with consistent styling.
  *
  * Example:
- *   ── Phase 2: LLM Analysis ─────────────────────
+ *   â”€â”€ Phase 2: LLM Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  *
  * @param phase - Phase number.
  * @param title - Human-readable phase title.
@@ -556,30 +556,30 @@ export function renderPhaseHeader(phase: number, title: string): void {
   write(divider("Phase " + String(phase) + ": " + title));
 }
 
-// ─── Status Line Helpers ───────────────────────────────────────────────────────
+// â”€â”€â”€ Status Line Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Render an in-progress action line.
- *   →  Doing something...
+ *   â†’  Doing something...
  */
 export function renderAction(msg: string): void {
-  write(WHITE + "→  " + msg + R);
+  write(WHITE + "â†’  " + msg + R);
 }
 
 /**
  * Render a success status line.
- *   ✓  Done
+ *   âœ“  Done
  */
 export function renderSuccess(msg: string): void {
-  write(GREEN + "✓  " + msg + R);
+  write(GREEN + "âœ“  " + msg + R);
 }
 
 /**
  * Render a failure status line.
- *   ✕  Reason
+ *   âœ•  Reason
  */
 export function renderFailure(msg: string): void {
-  write(RED + "✕  " + msg + R);
+  write(RED + "âœ•  " + msg + R);
 }
 
 /**
@@ -598,7 +598,7 @@ export function renderInfo(msg: string): void {
   write(GRAY + msg + R);
 }
 
-// ─── Internal Helpers ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Internal Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Map a vulnerability vector to a severity label.

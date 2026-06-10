@@ -2,15 +2,15 @@
   "name": "vibeguard",
   "version": "1.0.0",
   "description": "CLI-native adversarial local QA daemon — intercepts git pushes, extracts diffs, analyzes via custom LLMs, fires live exploits, and auto-generates security patches before code leaves your machine.",
-  "main": "dist/cli.js",
+  "main": "dist/cli/index.js",
   "bin": {
-    "vibeguard": "./dist/cli.js"
+    "vibeguard": "./dist/cli/index.js"
   },
   "scripts": {
     "build": "tsc",
     "build:bundle": "node scripts/build.mjs",
     "build:all": "npm run build && npm run build:bundle",
-    "start": "node dist/cli.js",
+    "start": "node dist/cli/index.js",
     "prepublishOnly": "npm run build:all",
     "postinstall": "node scripts/verify.mjs"
   },

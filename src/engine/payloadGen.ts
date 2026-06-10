@@ -4,7 +4,7 @@
  * Sends the endpoint schema and code diff to the user's custom LLM with a
  * red-team system prompt to compile an array of malicious test payloads.
  *
- * Each payload is context-aware — if an endpoint expects a POST parameter
+ * Each payload is context-aware â€” if an endpoint expects a POST parameter
  * named `user_uuid`, the generated payload will inject into that field:
  * `user_uuid=1' OR '1'='1`.
  *
@@ -13,7 +13,7 @@
  * and input parameter. This ensures VibeGuard always has something to test,
  * even with unreliable models.
  *
- * Zero runtime dependencies — reuses the exported `callLLM` from llm.ts.
+ * Zero runtime dependencies â€” reuses the exported `callLLM` from llm.ts.
  */
 
 import type {
@@ -25,11 +25,11 @@ import type {
   AttackSuite,
   PayloadGenResult,
   VulnerabilityVector,
-} from "./types";
-import { callLLM } from "./llm";
-import * as ui from "./ui";
+} from "../core/types";
+import { callLLM } from "../infrastructure/llm";
+import * as ui from "../cli/ui";
 
-// ─── Constants ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Max number of targets to send in a single LLM call (batch size). */
 const MAX_TARGETS_PER_BATCH = 20;
@@ -37,7 +37,7 @@ const MAX_TARGETS_PER_BATCH = 20;
 /** Timeout per LLM call for payload generation (milliseconds). */
 const PAYLOAD_GEN_TIMEOUT_MS = 10_000;
 
-// ─── Red-Team System Prompt ─────────────────────────────────────────────────────
+// â”€â”€â”€ Red-Team System Prompt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * The adversarial payload generation persona.
@@ -48,7 +48,7 @@ const PAYLOAD_GEN_TIMEOUT_MS = 10_000;
  *   - Asks for expected failure criteria so results are measurable.
  *   - Limits attack types to the vulnerability vectors actually detected.
  */
-const RED_TEAM_PROMPT = `You are a **Red-Team Security Engineer** — an expert penetration tester specializing in web application security. Your task is to generate adversarial test payloads for a local QA pipeline.
+const RED_TEAM_PROMPT = `You are a **Red-Team Security Engineer** â€” an expert penetration tester specializing in web application security. Your task is to generate adversarial test payloads for a local QA pipeline.
 
 ## Your Task
 
@@ -57,7 +57,7 @@ Given a list of API endpoints with their detected vulnerability vectors, input p
 ## Rules
 
 1. **Context-aware payloads.** If an endpoint has a parameter named "user_uuid", generate a SQL injection payload specifically for that field: \`"user_uuid": "1' OR '1'='1"\`.
-2. **Realistic attack simulation.** Payloads should mimic real attack patterns — not just random strings. Use known bypass techniques, injection syntax, and fuzzing patterns.
+2. **Realistic attack simulation.** Payloads should mimic real attack patterns â€” not just random strings. Use known bypass techniques, injection syntax, and fuzzing patterns.
 3. **One payload per vulnerability per endpoint.** If an endpoint has both "sql_injection" and "auth_bypass", generate separate payloads for each.
 4. **Include expected failure criteria.** For each payload, describe what response indicates the attack succeeded (e.g., "HTTP 500 with SQL error", "HTTP 200 returning admin data without authentication").
 5. **Safe for local testing.** Payloads should test for vulnerabilities without causing permanent damage (no DROP TABLE, no rm -rf, no destructive writes).
@@ -98,15 +98,15 @@ The JSON must have exactly one key: "attack_suite", which is an array of objects
         "user_id": "0",
         "user_id": "999999"
       },
-      "expected_fail_criteria": "HTTP 200 returning data for a different user — insecure direct object reference via predictable user_id parameter"
+      "expected_fail_criteria": "HTTP 200 returning data for a different user â€” insecure direct object reference via predictable user_id parameter"
     }
   ]
 }
 \`\`\`
 
-Generate the attack suite now. Be thorough — every vulnerability vector on every endpoint should have at least one payload.`;
+Generate the attack suite now. Be thorough â€” every vulnerability vector on every endpoint should have at least one payload.`;
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Generate adversarial test payloads for the mapped endpoint targets.
@@ -152,7 +152,7 @@ export async function generatePayloads(
     "Files changed: " + String(filteredDiff.files.length),
     "Estimated tokens in diff: ~" + String(filteredDiff.estimatedTokens),
     "",
-    "Generate the attack_suite JSON now. No preamble, no markdown — pure JSON only.",
+    "Generate the attack_suite JSON now. No preamble, no markdown â€” pure JSON only.",
   ].join("\n");
 
   ui.action(
@@ -174,7 +174,7 @@ export async function generatePayloads(
     attackSuite = parseAttackSuite(rawResponse);
     generatedCount = attackSuite.attack_suite.length;
   } catch (err: unknown) {
-    // LLM call failed or JSON was unparseable — fall back to deterministic generation.
+    // LLM call failed or JSON was unparseable â€” fall back to deterministic generation.
     ui.warn(
       "  LLM payload generation failed: " +
       ((err as Error).message ?? String(err)).slice(0, 100)
@@ -187,7 +187,7 @@ export async function generatePayloads(
     attackSuite = { attack_suite: [] };
   }
 
-  // ── Fallback: deterministic payloads for any target not covered ──────
+  // â”€â”€ Fallback: deterministic payloads for any target not covered â”€â”€â”€â”€â”€â”€
   const coveredUrls = new Set(attackSuite.attack_suite.map((a) => a.target_url));
 
   for (const test of targets.executable_tests) {
@@ -209,7 +209,7 @@ export async function generatePayloads(
   };
 }
 
-// ─── Target Schema Builder ──────────────────────────────────────────────────────
+// â”€â”€â”€ Target Schema Builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Serialize the target list into a compact JSON-like format for the LLM prompt.
@@ -234,7 +234,7 @@ function buildTargetSchema(targets: TargetTargets): string {
   return "[\n" + entries.join(",\n") + "\n]";
 }
 
-// ─── Response Parsing ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Response Parsing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Parse the LLM's raw response into an AttackSuite.
@@ -325,7 +325,7 @@ function sanitizePayloadData(raw: unknown): Record<string, string> {
   return out;
 }
 
-// ─── Fallback Payload Generator ─────────────────────────────────────────────────
+// â”€â”€â”€ Fallback Payload Generator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Deterministic payload generation when the LLM fails.
@@ -376,7 +376,7 @@ function buildFallbackPayload(
 
 /**
  * Known attack payloads for each vulnerability vector.
- * These are standard security testing values — safe for local use.
+ * These are standard security testing values â€” safe for local use.
  */
 function getFallbackValues(vector: VulnerabilityVector): string[] {
   switch (vector) {
@@ -501,7 +501,7 @@ function getFallbackCriteria(vector: VulnerabilityVector): string {
     case "sql_injection":
       return "HTTP 500 with SQL syntax error, or HTTP 200 with unexpected data indicating successful injection.";
     case "auth_bypass":
-      return "HTTP 200 with session token or redirect to dashboard — authentication bypassed without valid credentials.";
+      return "HTTP 200 with session token or redirect to dashboard â€” authentication bypassed without valid credentials.";
     case "privilege_escalation":
       return "HTTP 200 returning admin-level data or performing an action reserved for higher-privilege roles.";
     case "rce":

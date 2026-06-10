@@ -22,9 +22,21 @@ import type {
   FilteredFile,
   FilteredHunk,
   FilteredLine,
-} from "./types";
+} from "../core/types";
+import {
+  isCommentLine,
+  isEmptyLine,
+  stripInlineComment,
+  SINGLE_LINE_COMMENT_RE,
+  WHITESPACE_ONLY_RE,
+  BLOCK_COMMENT_START_RE,
+  BLOCK_COMMENT_END_RE,
+  DOCSTRING_DELIM_RE,
+  JSDOC_CONTINUATION_RE,
+  INLINE_BLOCK_COMMENT_RE,
+} from "../utils/comment-stripper";
 
-// ─── File Extension Whitelist ──────────────────────────────────────────────────
+// â”€â”€â”€ File Extension Whitelist â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Extensions for files that contain functional back-end or front-end logic.
@@ -118,36 +130,7 @@ const ALWAYS_DISCARD_PATTERNS = [
   /\.snap$/,
 ];
 
-// ─── Comment / Noise Patterns ──────────────────────────────────────────────────
-
-/** Regex for single-line comments across languages. */
-const SINGLE_LINE_COMMENT_RE = /^\s*(\/\/|#|--|;|%|!).*$/;
-
-/** Regex for lines that are only whitespace. */
-const WHITESPACE_ONLY_RE = /^\s*$/;
-
-/** Detect the start of a C-style block comment or JSDoc/PHPDoc block. */
-const BLOCK_COMMENT_START_RE = /^\s*\/\*[*!]?/;
-
-/** Detect the end of a C-style block comment. */
-const BLOCK_COMMENT_END_RE = /\*\/\s*$/;
-
-/** Detect a Python/Elixir docstring delimiter (triple-quote). */
-const DOCSTRING_DELIM_RE = /^\s*("{3}|'{3})/;
-
-/** Inline comment suffix - matches // or # after code. */
-const INLINE_COMMENT_RE = /(\/\/|#)\s*[^/].*$/;
-
-/** Strip inline C-style comments mid-line (before any code continuation). */
-const INLINE_BLOCK_COMMENT_RE = /\/\*.*?\*\//g;
-
-/**
- * Lines that serve only as block-comment continuation markers.
- * e.g. " * @param foo" or " * Description..."
- */
-const JSDOC_CONTINUATION_RE = /^\s*\*\s?/;
-
-// ─── Context Extraction ────────────────────────────────────────────────────────
+// â”€â”€â”€ Context Extraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Patterns to extract function/method/class names from hunk @@ headers.
@@ -182,7 +165,7 @@ const FUNCTION_CONTEXT_RES: RegExp[] = [
   /@(?:Get|Post|Put|Delete|Patch|RequestMapping)\s*[(]\s*['\"]([^'\"]+)['\"]/i,
 ];
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Apply the full noise filter pipeline to a raw DiffResult.
@@ -226,7 +209,7 @@ export function filterDiff(diff: DiffResult): FilteredDiff {
   };
 }
 
-// ─── File-Level Filtering ──────────────────────────────────────────────────────
+// â”€â”€â”€ File-Level Filtering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Determine if a file should be discarded, with a human-readable reason.
@@ -311,7 +294,7 @@ function getExtension(basename: string): string {
   return "." + parts.slice(1).join(".");
 }
 
-// ─── File-Level Processing ─────────────────────────────────────────────────────
+// â”€â”€â”€ File-Level Processing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Filter a single DiffFile: strip noise lines and extract context.
@@ -347,7 +330,7 @@ function countByType(lines: FilteredLine[], type: string): number {
   return count;
 }
 
-// ─── Hunk-Level Processing ─────────────────────────────────────────────────────
+// â”€â”€â”€ Hunk-Level Processing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Filter a single DiffHunk: strip comment lines, doc blocks, whitespace noise,
@@ -449,75 +432,7 @@ function filterHunk(hunk: DiffHunk): FilteredHunk {
   };
 }
 
-// ─── Comment Stripping Helpers ──────────────────────────────────────────────────
-
-/**
- * Strip an inline single-line comment from a line of code.
- * Handles the case where // or # appears inside a string literal.
- *
- * Strategy: find the comment delimiter that appears outside of quotes.
- * This is a simplified heuristic - it does not handle every edge case
- * but avoids the most common false positive (URLs).
- */
-function stripInlineComment(line: string): string {
-  // Check for // comments (JS/TS/Go/PHP/Java/C/etc.)
-  const doubleSlashIdx = findCommentDelimiter(line, "//");
-  if (doubleSlashIdx !== -1) {
-    const candidate = line.slice(0, doubleSlashIdx).trimEnd();
-    if (candidate.length > 0) return candidate;
-    return "";
-  }
-
-  // Check for # comments (Python/Ruby/PHP/Shell)
-  const hashIdx = findCommentDelimiter(line, "#");
-  if (hashIdx !== -1) {
-    const candidate = line.slice(0, hashIdx).trimEnd();
-    if (candidate.length > 0) return candidate;
-    return "";
-  }
-
-  return line;
-}
-
-/**
- * Find the position of a comment delimiter that is NOT inside a string literal.
- * Returns -1 if no viable comment delimiter is found.
- */
-function findCommentDelimiter(line: string, delimiter: string): number {
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inBacktick = false;
-
-  for (let i = 0; i < line.length - 1; i++) {
-    const ch = line[i];
-    const prev = i > 0 ? line[i - 1] : "";
-
-    // Toggle quote state (skip escaped quotes).
-    if (ch === "'" && prev !== "\\" && !inDoubleQuote && !inBacktick) {
-      inSingleQuote = !inSingleQuote;
-      continue;
-    }
-    if (ch === '"' && prev !== "\\" && !inSingleQuote && !inBacktick) {
-      inDoubleQuote = !inDoubleQuote;
-      continue;
-    }
-    if (ch === "`" && prev !== "\\" && !inSingleQuote && !inDoubleQuote) {
-      inBacktick = !inBacktick;
-      continue;
-    }
-
-    // Check for delimiter outside of any string.
-    if (!inSingleQuote && !inDoubleQuote && !inBacktick) {
-      if (line.slice(i, i + delimiter.length) === delimiter) {
-        return i;
-      }
-    }
-  }
-
-  return -1;
-}
-
-// ─── Context Extraction ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Context Extraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Try to extract a function/method/class/endpoint name from a hunk header.
@@ -557,7 +472,7 @@ function extractContext(header: string): string | null {
   return null;
 }
 
-// ─── Token Estimation ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Token Estimation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Rough token count estimator.
@@ -587,7 +502,7 @@ function estimateTokens(files: FilteredFile[]): number {
   return Math.max(1, Math.ceil(totalChars / 3.5));
 }
 
-// ─── Standalone Utilities ──────────────────────────────────────────────────────
+// â”€â”€â”€ Standalone Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Quick pre-filter: return only the files from a DiffResult that would survive

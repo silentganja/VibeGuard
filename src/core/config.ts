@@ -1,5 +1,5 @@
 /**
- * VibeGuard — Configuration Manager
+ * VibeGuard â€” Configuration Manager
  *
  * Reads, writes, and validates `.vibeguard.json` at the project root.
  * The project root is discovered by walking upward from cwd until a `.git`
@@ -14,10 +14,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import type { VibeGuardConfig, RawConfig, DbConnectionConfig } from "./types";
-import { isHeadless, detectCIPlatform, readConfigFromEnv, getMissingEnvConfigFields, ENV_KEYS } from "./ci";
-import * as ui from "./ui";
+import { isHeadless, detectCIPlatform, readConfigFromEnv, getMissingEnvConfigFields, ENV_KEYS } from "../compliance/ci";
+import * as ui from "../cli/ui";
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const CONFIG_FILENAME = ".vibeguard.json";
 
@@ -40,7 +40,7 @@ const DEFAULT_CONFIG: VibeGuardConfig = {
   db_sqlite_path: "",
 };
 
-// ─── Project Root Discovery ──────────────────────────────────────────────────
+// â”€â”€â”€ Project Root Discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Walk upward from `startDir` until a `.git` entry is found. */
 export function findProjectRoot(startDir: string = process.cwd()): string | null {
@@ -64,13 +64,13 @@ export function findProjectRoot(startDir: string = process.cwd()): string | null
   return null;
 }
 
-// ─── Path Helpers ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Path Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function configPath(root: string): string {
   return path.join(root, CONFIG_FILENAME);
 }
 
-// ─── Validation ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Validate a raw config object. Returns a list of human-readable errors. */
 export function validateConfig(raw: Partial<VibeGuardConfig>): string[] {
@@ -128,7 +128,7 @@ export function validateConfig(raw: Partial<VibeGuardConfig>): string[] {
     }
   }
 
-  // ── Phase 4: DB config validation (all fields are optional) ──────────
+  // â”€â”€ Phase 4: DB config validation (all fields are optional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const VALID_DB_TYPES = new Set(["mysql", "postgresql", "sqlite", "none"]);
 
   if (raw.db_type !== undefined) {
@@ -164,23 +164,23 @@ export function validateConfig(raw: Partial<VibeGuardConfig>): string[] {
   return errors;
 }
 
-// ─── Reading ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Reading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Read and validate the config from the project root.
  *
  * Strategy:
- *   1. If running headless (CI/CD) → skip filesystem config, read from env vars.
- *   2. If .vibeguard.json exists → read and validate it (local dev mode).
- *   3. If .vibeguard.json is missing BUT env vars are set → use env vars.
- *   4. If neither exists → throw with actionable error message.
+ *   1. If running headless (CI/CD) â†’ skip filesystem config, read from env vars.
+ *   2. If .vibeguard.json exists â†’ read and validate it (local dev mode).
+ *   3. If .vibeguard.json is missing BUT env vars are set â†’ use env vars.
+ *   4. If neither exists â†’ throw with actionable error message.
  *
  * Throws with a user-facing message if anything is wrong.
  */
 export function readConfig(root?: string): VibeGuardConfig {
   const headless = isHeadless();
 
-  // ── Path 1: Headless CI/CD — use environment variables ──────────────
+  // â”€â”€ Path 1: Headless CI/CD â€” use environment variables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (headless) {
     const envConfig = readConfigFromEnv();
 
@@ -198,7 +198,7 @@ export function readConfig(root?: string): VibeGuardConfig {
       if (missingFields.length > 0) {
         msg += `\n\nMissing required environment variables:\n`;
         for (const field of missingFields) {
-          msg += `  · ${field}\n`;
+          msg += `  Â· ${field}\n`;
         }
         msg += `\nSet these variables in your CI pipeline configuration.`;
       }
@@ -209,7 +209,7 @@ export function readConfig(root?: string): VibeGuardConfig {
     return merged as VibeGuardConfig;
   }
 
-  // ── Path 2 & 3: Local — try filesystem config ──────────────────────
+  // â”€â”€ Path 2 & 3: Local â€” try filesystem config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const projectRoot = root ?? findProjectRoot();
 
   const filePath = projectRoot
@@ -230,11 +230,11 @@ export function readConfig(root?: string): VibeGuardConfig {
           `Failed to read ${CONFIG_FILENAME}: ${(err as Error).message}`
         );
       }
-      // ENOENT — file doesn't exist. Fall through to env var check.
+      // ENOENT â€” file doesn't exist. Fall through to env var check.
     }
   }
 
-  // ── Path 3: No config file — try env vars as fallback ─────────────
+  // â”€â”€ Path 3: No config file â€” try env vars as fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!fileExists) {
     const envConfig = readConfigFromEnv();
 
@@ -254,14 +254,14 @@ export function readConfig(root?: string): VibeGuardConfig {
       return merged as VibeGuardConfig;
     }
 
-    // No config file and insufficient env vars — cannot proceed.
+    // No config file and insufficient env vars â€” cannot proceed.
     throw new Error(
       `No ${CONFIG_FILENAME} found and no ${ENV_KEYS.LLM_PROVIDER}/${ENV_KEYS.LLM_ENDPOINT}/${ENV_KEYS.LLM_KEY}/${ENV_KEYS.LLM_MODEL}/${ENV_KEYS.TARGET_URL} environment variables set.\n` +
       `Run \`vibeguard init\` to create a config file, or set the VIBE_* environment variables for CI/CD usage.`
     );
   }
 
-  // ── Path 2: Config file exists — validate and return ───────────────
+  // â”€â”€ Path 2: Config file exists â€” validate and return â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new Error(`${CONFIG_FILENAME} must contain a JSON object.`);
   }
@@ -276,12 +276,12 @@ export function readConfig(root?: string): VibeGuardConfig {
   return raw as VibeGuardConfig;
 }
 
-// ─── API Key Resolution ──────────────────────────────────────────────────────
+// â”€â”€â”€ API Key Resolution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Resolve an API key that may be an env-var reference.
- *   "$OPENAI_API_KEY" → process.env.OPENAI_API_KEY
- *   "sk-abc123"       → "sk-abc123" (passthrough)
+ *   "$OPENAI_API_KEY" â†’ process.env.OPENAI_API_KEY
+ *   "sk-abc123"       â†’ "sk-abc123" (passthrough)
  */
 export function resolveApiKey(raw: string): string {
   if (raw.startsWith("$")) {
@@ -298,7 +298,7 @@ export function resolveApiKey(raw: string): string {
   return raw;
 }
 
-// ─── Interactive Initialization ──────────────────────────────────────────────
+// â”€â”€â”€ Interactive Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Run the interactive `vibeguard init` wizard.
@@ -327,7 +327,7 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
     ui.warn(`${CONFIG_FILENAME} already exists. It will be overwritten.`);
   }
 
-  ui.header("VibeGuard · Configuration");
+  ui.header("VibeGuard Â· Configuration");
   ui.space();
   ui.muted("Press Enter to accept the default value shown in brackets.");
   ui.space();
@@ -356,9 +356,9 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
   const targetUrl = await ask("Target Local Dev Server URL", DEFAULT_CONFIG.target_local_url);
   const excludeRaw = await ask("Exclude paths (comma-separated)", DEFAULT_CONFIG.exclude_paths.join(", "));
 
-  // ── Phase 4: Database Configuration ──────────────────────────────────
+  // â”€â”€ Phase 4: Database Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ui.space();
-  ui.muted("─ Database State Guard (Phase 4) ─");
+  ui.muted("â”€ Database State Guard (Phase 4) â”€");
   ui.muted("  These fields are optional. Set db_type to \"none\" to skip DB guarding.");
   ui.space();
 
@@ -405,7 +405,7 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
   if (errors.length > 0) {
     ui.fail("Configuration is invalid:");
     for (const err of errors) {
-      ui.muted(`  · ${err}`);
+      ui.muted(`  Â· ${err}`);
     }
     throw new Error("Aborted due to validation errors.");
   }
@@ -413,31 +413,31 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
   // Write it
   fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + "\n", "utf-8");
   ui.space();
-  ui.ok(`${CONFIG_FILENAME} written → ${filePath}`);
+  ui.ok(`${CONFIG_FILENAME} written â†’ ${filePath}`);
 
   return config;
 }
 
-// ─── Helpers exposed for CLI ─────────────────────────────────────────────────
+// â”€â”€â”€ Helpers exposed for CLI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Print the current config to stdout (for `vibeguard config`). */
 export function printConfig(): void {
   const config = readConfig();
-  ui.header("VibeGuard · Current Configuration");
+  ui.header("VibeGuard Â· Current Configuration");
   ui.space();
   ui.kv("Provider", config.llm_provider);
   ui.kv("Endpoint", config.llm_api_endpoint);
   ui.kv("API Key", config.llm_api_key.startsWith("$")
     ? `${config.llm_api_key} (env var)`
-    : "(literal — consider using $ENV_VAR)");
+    : "(literal â€” consider using $ENV_VAR)");
   ui.kv("Model", config.llm_model);
   ui.kv("Target URL", config.target_local_url);
   ui.kv("Excluded", config.exclude_paths.join(", ") || "(none)");
 
-  // ── Phase 4: Database ────────────────────────────────────────────────
+  // â”€â”€ Phase 4: Database â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const dbType = config.db_type ?? "none";
   ui.space();
-  ui.muted("─ Database State Guard ─");
+  ui.muted("â”€ Database State Guard â”€");
   ui.kv("DB Type", dbType);
   if (dbType !== "none") {
     if (dbType === "sqlite") {
@@ -454,7 +454,7 @@ export function printConfig(): void {
   }
 }
 
-// ─── Phase 4 Helper ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Phase 4 Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Extract a normalized DbConnectionConfig from the full config.

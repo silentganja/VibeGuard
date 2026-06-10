@@ -1,7 +1,7 @@
 /**
  * VibeGuard - Compliance Validator
  *
- * Runs at the very start of the pre-push pipeline — before any code analysis,
+ * Runs at the very start of the pre-push pipeline â€” before any code analysis,
  * network calls, or database snapshots. Enforces two quality gates:
  *
  *   1. README Update Check:
@@ -16,18 +16,18 @@
  *      by a descriptive message.
  *
  * If either check fails, the push is aborted immediately with exit code 1.
- * These checks run locally and cost nothing — they prevent sloppy pushes from
+ * These checks run locally and cost nothing â€” they prevent sloppy pushes from
  * ever reaching the LLM analysis stage.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
-import type { ComplianceResult } from "./types";
-import { CONVENTIONAL_COMMIT_PREFIXES } from "./types";
-import * as ui from "./ui";
+import type { ComplianceResult } from "../core/types";
+import { CONVENTIONAL_COMMIT_PREFIXES } from "../core/types";
+import * as ui from "../cli/ui";
 
-// ─── Constants ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Minimum character count for README.md to be considered substantive. */
 const MIN_README_LENGTH = 200;
@@ -64,7 +64,7 @@ const CURRENT_DOC_INDICATORS = [
   "quick start",
 ];
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Run both compliance checks against the current project.
@@ -133,14 +133,14 @@ export function enforce(projectRoot: string): void {
   }
 
   ui.rule();
-  ui.fail("Push blocked — compliance checks must pass before analysis proceeds.");
+  ui.fail("Push blocked â€” compliance checks must pass before analysis proceeds.");
   ui.muted("");
   ui.muted("To bypass (NOT RECOMMENDED):");
   ui.muted("  git push --no-verify");
   process.exit(1);
 }
 
-// ─── README Check ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ README Check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Verify that README.md exists, is substantive, and contains current documentation.
@@ -210,7 +210,7 @@ function checkReadme(projectRoot: string): { ok: boolean; reason: string } {
     };
   }
 
-  // Check modification time — README should have been touched recently alongside code.
+  // Check modification time â€” README should have been touched recently alongside code.
   try {
     const stat = fs.statSync(readmePath);
     const ageDays = (Date.now() - stat.mtimeMs) / (1000 * 60 * 60 * 24);
@@ -224,7 +224,7 @@ function checkReadme(projectRoot: string): { ok: boolean; reason: string } {
       };
     }
   } catch {
-    // Stat failed — ignore this sub-check.
+    // Stat failed â€” ignore this sub-check.
   }
 
   return {
@@ -233,7 +233,7 @@ function checkReadme(projectRoot: string): { ok: boolean; reason: string } {
   };
 }
 
-// ─── Commit Message Check ───────────────────────────────────────────────────────
+// â”€â”€â”€ Commit Message Check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Verify that the latest git commit follows the Conventional Commits standard.
@@ -267,11 +267,11 @@ function checkCommitMessage(): { ok: boolean; reason: string } {
   // Extract the subject line (first line, strip any merge prefix).
   const subject = message.split("\n")[0].trim();
 
-  // Skip merge commits — they're auto-generated.
+  // Skip merge commits â€” they're auto-generated.
   if (subject.startsWith("Merge ") || subject.startsWith("Merge branch ")) {
     return {
       ok: true,
-      reason: "Merge commit detected — semantic check skipped for auto-generated merge messages.",
+      reason: "Merge commit detected â€” semantic check skipped for auto-generated merge messages.",
     };
   }
 

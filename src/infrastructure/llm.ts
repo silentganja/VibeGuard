@@ -1,5 +1,5 @@
 /**
- * VibeGuard — LLM Context Payload Builder & API Client
+ * VibeGuard â€” LLM Context Payload Builder & API Client
  *
  * Reads the filtered diff footprint from parser.ts and compiles a high-density,
  * security-focused prompt for adversarial QA analysis via the user's configured
@@ -9,9 +9,9 @@
  * structured JSON map of intent + attack surfaces for each modified endpoint.
  *
  * Supported providers:
- *   · custom    — OpenAI-compatible endpoint (LM Studio, Ollama, vLLM, etc.)
- *   · openai    — OpenAI API (chat/completions)
- *   · anthropic — Anthropic API (messages)
+ *   Â· custom    â€” OpenAI-compatible endpoint (LM Studio, Ollama, vLLM, etc.)
+ *   Â· openai    â€” OpenAI API (chat/completions)
+ *   Â· anthropic â€” Anthropic API (messages)
  *
  * Response parsing handles both strict JSON-mode responses and fallback
  * extraction from models that wrap JSON in markdown fences.
@@ -26,11 +26,11 @@ import type {
   ModifiedEndpoint,
   AnalysisVerdict,
   VulnerabilityVector,
-} from "./types";
-import { resolveApiKey } from "./config";
-import * as ui from "./ui";
+} from "../core/types";
+import { resolveApiKey } from "../core/config";
+import * as ui from "../cli/ui";
 
-// ─── Constants ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Valid vulnerability vectors for response validation. */
 const VALID_VECTORS = new Set<VulnerabilityVector>([
@@ -59,19 +59,19 @@ const MAX_PAYLOAD_CHARS = 28_000;
 /** HTTP request timeout in milliseconds (6 seconds per spec). */
 const REQUEST_TIMEOUT_MS = 6_000;
 
-// ─── System Prompt ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ System Prompt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * The Sovereign System Architect persona.
  *
  * Designed to elicit structured, security-conscious analysis of code changes.
  * The prompt explicitly:
- *   · Defines the model's role and expertise.
- *   · Requires strict JSON output matching the ModifiedEndpoint schema.
- *   · Guides the model to think adversarially about every input.
- *   · Asks the model to infer routes, methods, and parameters from code context.
+ *   Â· Defines the model's role and expertise.
+ *   Â· Requires strict JSON output matching the ModifiedEndpoint schema.
+ *   Â· Guides the model to think adversarially about every input.
+ *   Â· Asks the model to infer routes, methods, and parameters from code context.
  */
-const SYSTEM_PROMPT = `You are a **Sovereign System Architect** — a principal-level security engineer and code reviewer. Your purpose is to analyze git diffs and identify intent, attack surfaces, and vulnerability vectors in every code change.
+const SYSTEM_PROMPT = `You are a **Sovereign System Architect** â€” a principal-level security engineer and code reviewer. Your purpose is to analyze git diffs and identify intent, attack surfaces, and vulnerability vectors in every code change.
 
 ## Your Task
 
@@ -81,7 +81,7 @@ Analyze the provided git diff. For each modified file that touches an API endpoi
 
 1. **Think adversarially.** Assume every user-controlled input is hostile until proven safe.
 2. **Infer from context.** If the route path isn't explicit in the diff, estimate it from file names, function names, class names, or directory structure.
-3. **Detect intent.** Describe what the code change is trying to accomplish — not just what it does, but *why* it was written.
+3. **Detect intent.** Describe what the code change is trying to accomplish â€” not just what it does, but *why* it was written.
 4. **Surface all inputs.** List every variable, parameter, POST field, query string, header, cookie, or session value that feeds into the changed code.
 5. **Be specific.** Vague findings like "check for bugs" are not acceptable. Name concrete vulnerability classes with evidence from the diff.
 6. **Skip noise.** If a file change is purely cosmetic, configuration tuning, or has no security relevance, do not include it in the output.
@@ -89,20 +89,20 @@ Analyze the provided git diff. For each modified file that touches an API endpoi
 ## Vulnerability Vectors
 
 You may flag any of these standard classes:
-- **sql_injection** — Unparameterized queries, string concatenation into SQL.
-- **privilege_escalation** — Missing authorization checks, role bypass.
-- **auth_bypass** — Weak or missing authentication on sensitive paths.
-- **rce** — eval(), exec(), system(), deserialization, command injection.
-- **input_fuzzing** — Unvalidated user input reaching dangerous sinks.
-- **xss** — Unescaped output, innerHTML, dangerous DOM apis.
-- **path_traversal** — File reads/writes with user-controlled paths.
-- **ssrf** — Server-side requests with user-controlled URLs.
-- **idor** — Direct object references without ownership checks.
-- **race_condition** — TOCTOU on shared state, non-atomic transactions.
-- **deserialization** — Unsafe unserialize(), pickle, JSON.parse on untrusted data.
-- **information_disclosure** — Stack traces, debug endpoints, verbose errors.
-- **misconfiguration** — Disabled security features, permissive CORS, exposed secrets.
-- **other** — Anything else worth flagging (explain in detected_intent).
+- **sql_injection** â€” Unparameterized queries, string concatenation into SQL.
+- **privilege_escalation** â€” Missing authorization checks, role bypass.
+- **auth_bypass** â€” Weak or missing authentication on sensitive paths.
+- **rce** â€” eval(), exec(), system(), deserialization, command injection.
+- **input_fuzzing** â€” Unvalidated user input reaching dangerous sinks.
+- **xss** â€” Unescaped output, innerHTML, dangerous DOM apis.
+- **path_traversal** â€” File reads/writes with user-controlled paths.
+- **ssrf** â€” Server-side requests with user-controlled URLs.
+- **idor** â€” Direct object references without ownership checks.
+- **race_condition** â€” TOCTOU on shared state, non-atomic transactions.
+- **deserialization** â€” Unsafe unserialize(), pickle, JSON.parse on untrusted data.
+- **information_disclosure** â€” Stack traces, debug endpoints, verbose errors.
+- **misconfiguration** â€” Disabled security features, permissive CORS, exposed secrets.
+- **other** â€” Anything else worth flagging (explain in detected_intent).
 
 ## Output Format
 
@@ -138,7 +138,7 @@ If no functional endpoints are modified, return: { "modified_endpoints": [] }
 
 You are the final gatekeeper before code reaches production. Every vulnerability you miss is a potential breach.`;
 
-// ─── Diff Serializer ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Diff Serializer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Serialize a FilteredDiff into a compact, token-efficient text representation
@@ -172,7 +172,7 @@ function serializeDiffForPrompt(diff: FilteredDiff): string {
     for (const hunk of file.hunks) {
       parts.push(hunk.header);
       if (hunk.surrounding_context) {
-        parts.push(`  ↳ context: ${hunk.surrounding_context}`);
+        parts.push(`  â†³ context: ${hunk.surrounding_context}`);
       }
       for (const line of hunk.lines) {
         const prefix = line.type === "add" ? "+" : line.type === "delete" ? "-" : " ";
@@ -200,13 +200,13 @@ function buildDiffPayload(diff: FilteredDiff): string {
     const cutPoint = lastNewline > 0 ? lastNewline : MAX_PAYLOAD_CHARS;
 
     serialized = truncated.slice(0, cutPoint) +
-      `\n\n⚠️  [Diff truncated at ~${MAX_PAYLOAD_CHARS} chars — ${diff.files.length} files, ~${diff.estimatedTokens} tokens estimated. Full analysis may be incomplete.]`;
+      `\n\nâš ï¸  [Diff truncated at ~${MAX_PAYLOAD_CHARS} chars â€” ${diff.files.length} files, ~${diff.estimatedTokens} tokens estimated. Full analysis may be incomplete.]`;
   }
 
   return serialized;
 }
 
-// ─── LLM API Clients ────────────────────────────────────────────────────────────
+// â”€â”€â”€ LLM API Clients â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Call the user's configured LLM API with the system prompt and user message.
@@ -298,7 +298,7 @@ async function callOpenAICompatible(
 
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error("LLM returned an empty response — no content in choices[0].message.content");
+      throw new Error("LLM returned an empty response â€” no content in choices[0].message.content");
     }
 
     return content;
@@ -376,7 +376,7 @@ async function callAnthropic(
 
     const textBlocks = data.content?.filter((b) => b.type === "text" && b.text);
     if (!textBlocks || textBlocks.length === 0) {
-      throw new Error("Anthropic returned an empty response — no text content blocks");
+      throw new Error("Anthropic returned an empty response â€” no text content blocks");
     }
 
     // Prepend the `{` that we used as a prefill.
@@ -395,15 +395,15 @@ async function callAnthropic(
   }
 }
 
-// ─── Response Parsing ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Response Parsing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Parse the LLM's raw text response into an LLMAnalysisResult.
  *
  * Handles:
- *   1. Clean JSON — direct parse.
- *   2. Markdown-fenced JSON — extracts from ```json ... ``` blocks.
- *   3. JSON with surrounding text — finds the outermost { } pair.
+ *   1. Clean JSON â€” direct parse.
+ *   2. Markdown-fenced JSON â€” extracts from ```json ... ``` blocks.
+ *   3. JSON with surrounding text â€” finds the outermost { } pair.
  *
  * Validates the structure matches the expected schema and sanitizes
  * malformed entries.
@@ -499,7 +499,7 @@ function sanitizeStringArray(raw: unknown): string[] {
     .filter(Boolean);
 }
 
-// ─── Verdict Builder ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Verdict Builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Build an AnalysisVerdict from the LLM's structured result.
@@ -507,11 +507,11 @@ function sanitizeStringArray(raw: unknown): string[] {
  * The verdict determines whether the push should be blocked.
  *
  * Severity heuristic:
- *   · critical: rce, auth_bypass                              → block
- *   · high:     sql_injection, privilege_escalation, deserialization  → block
- *   · medium:   ssrf, path_traversal, idor, information_disclosure    → warn
- *   · low:      xss, input_fuzzing, misconfiguration, race_condition  → pass with note
- *   · other:    depends on description                                → warn
+ *   Â· critical: rce, auth_bypass                              â†’ block
+ *   Â· high:     sql_injection, privilege_escalation, deserialization  â†’ block
+ *   Â· medium:   ssrf, path_traversal, idor, information_disclosure    â†’ warn
+ *   Â· low:      xss, input_fuzzing, misconfiguration, race_condition  â†’ pass with note
+ *   Â· other:    depends on description                                â†’ warn
  */
 function buildVerdict(result: LLMAnalysisResult, diff: FilteredDiff): AnalysisVerdict {
   const riskSummary: AnalysisVerdict["risk_summary"] = {};
@@ -611,7 +611,7 @@ function buildExplanation(
       lines.push("No functional endpoint modifications detected in this push.");
     } else {
       lines.push(
-        `${endpointCount} endpoint(s) modified — no vulnerability vectors flagged by the LLM.`
+        `${endpointCount} endpoint(s) modified â€” no vulnerability vectors flagged by the LLM.`
       );
     }
     lines.push(`Analyzed ${diff.files.length} file(s), ~${diff.estimatedTokens} tokens.`);
@@ -639,7 +639,7 @@ function buildExplanation(
   return lines.join("\n");
 }
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Run the full Phase 2 analysis pipeline:
@@ -648,8 +648,8 @@ function buildExplanation(
  *   3. Parse and validate the JSON response.
  *   4. Build a pass/fail verdict with an explanation.
  *
- * @param config  — Validated VibeGuard configuration.
- * @param diff    — Filtered diff from parser.ts.
+ * @param config  â€” Validated VibeGuard configuration.
+ * @param diff    â€” Filtered diff from parser.ts.
  * @returns An AnalysisVerdict that tells the hook whether to allow or block the push.
  */
 export async function analyzeDiff(
@@ -668,7 +668,7 @@ export async function analyzeDiff(
     "",
     diffPayload,
     "",
-    "Return the JSON analysis now. Remember: no preamble, no markdown fences — pure JSON only.",
+    "Return the JSON analysis now. Remember: no preamble, no markdown fences â€” pure JSON only.",
   ].join("\n");
 
   // Call the LLM.
@@ -686,7 +686,7 @@ export async function analyzeDiff(
 
     throw new Error(
       prefix + ": " + (err as Error).message + "\n" +
-      "Push blocked — cannot verify changes without LLM analysis."
+      "Push blocked â€” cannot verify changes without LLM analysis."
     );
   }
 
@@ -718,7 +718,7 @@ export function buildDryRunPayload(
     "",
     diffPayload,
     "",
-    "Return the JSON analysis now. Remember: no preamble, no markdown fences — pure JSON only.",
+    "Return the JSON analysis now. Remember: no preamble, no markdown fences â€” pure JSON only.",
   ].join("\n");
 
   return {

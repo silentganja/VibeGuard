@@ -1,5 +1,5 @@
 /**
- * VibeGuard — CI/CD Environment Detection & Enterprise Configuration
+ * VibeGuard â€” CI/CD Environment Detection & Enterprise Configuration
  *
  * Phase 9: Detects headless automation environments (GitHub Actions, GitLab CI,
  * Jenkins, CircleCI, etc.) and switches the engine into machine-readable,
@@ -7,15 +7,15 @@
  * fallback for environments where .vibeguard.json is not present.
  *
  * Design:
- *   · isHeadless() — inspects process environment for known CI flags.
- *   · readConfigFromEnv() — maps VIBE_* env vars to VibeGuardConfig.
- *   · getOutputMode() — returns "ci" or "terminal" for output formatting.
- *   · Zero runtime dependencies — uses only process.env inspection.
+ *   Â· isHeadless() â€” inspects process environment for known CI flags.
+ *   Â· readConfigFromEnv() â€” maps VIBE_* env vars to VibeGuardConfig.
+ *   Â· getOutputMode() â€” returns "ci" or "terminal" for output formatting.
+ *   Â· Zero runtime dependencies â€” uses only process.env inspection.
  */
 
-import type { VibeGuardConfig, DbType, LLMProvider } from "./types";
+import type { VibeGuardConfig, DbType, LLMProvider } from "../core/types";
 
-// ─── CI Detection Flags ────────────────────────────────────────────────────────
+// â”€â”€â”€ CI Detection Flags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Known environment variables that indicate a CI/CD automation environment.
@@ -54,7 +54,7 @@ const CI_FLAGS: string[] = [
 const ENTERPRISE_FLAG = "VIBE_ENV";
 const ENTERPRISE_VALUE = "enterprise";
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Determine whether VibeGuard is running in a headless CI/CD environment.
@@ -65,11 +65,11 @@ const ENTERPRISE_VALUE = "enterprise";
  *   3. The process has no TTY attached (stdin is not a terminal).
  *
  * When headless, VibeGuard will:
- *   · Skip interactive prompts (init wizard, config creation).
- *   · Disable ANSI color codes in output.
- *   · Output machine-readable text streams.
- *   · Not write to .git/hooks.
- *   · Bypass the Phase 7 patch viewer UI.
+ *   Â· Skip interactive prompts (init wizard, config creation).
+ *   Â· Disable ANSI color codes in output.
+ *   Â· Output machine-readable text streams.
+ *   Â· Not write to .git/hooks.
+ *   Â· Bypass the Phase 7 patch viewer UI.
  */
 export function isHeadless(): boolean {
   // Check explicit enterprise flag first (user override).
@@ -80,7 +80,7 @@ export function isHeadless(): boolean {
   // Check for known CI environment variables.
   for (const flag of CI_FLAGS) {
     if (process.env[flag]) {
-      // Some CI systems set CI=false — respect that.
+      // Some CI systems set CI=false â€” respect that.
       if (flag === "CI" && process.env.CI === "false") {
         continue;
       }
@@ -99,8 +99,8 @@ export function isHeadless(): boolean {
 /**
  * Get the current output mode based on the execution environment.
  *
- *   "ci"       — Headless CI/CD pipeline; machine-readable, no ANSI colors.
- *   "terminal" — Local developer terminal; full ANSI UX, interactive.
+ *   "ci"       â€” Headless CI/CD pipeline; machine-readable, no ANSI colors.
+ *   "terminal" â€” Local developer terminal; full ANSI UX, interactive.
  */
 export function getOutputMode(): "ci" | "terminal" {
   return isHeadless() ? "ci" : "terminal";
@@ -134,7 +134,7 @@ export function detectCIPlatform(): string | null {
   return null;
 }
 
-// ─── Environment Variable → Config Mapping ─────────────────────────────────────
+// â”€â”€â”€ Environment Variable â†’ Config Mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Environment variable keys used for CI/CD configuration.
@@ -167,30 +167,30 @@ const VALID_DB_TYPES = new Set<string>(["mysql", "postgresql", "sqlite", "none"]
  * Read VibeGuard configuration from environment variables.
  *
  * This is the CI/CD fallback when .vibeguard.json is not present.
- * All fields are optional — missing required fields will be caught by
+ * All fields are optional â€” missing required fields will be caught by
  * the config validation step (validateConfig).
  *
  * Resolution matrix:
- *   VIBE_LLM_PROVIDER  → llm_provider
- *   VIBE_LLM_ENDPOINT  → llm_api_endpoint
- *   VIBE_LLM_KEY       → llm_api_key
- *   VIBE_LLM_MODEL     → llm_model
- *   VIBE_TARGET_URL    → target_local_url
- *   VIBE_EXCLUDE_PATHS → exclude_paths (comma-separated)
- *   VIBE_DB_TYPE       → db_type
- *   VIBE_DB_HOST       → db_host
- *   VIBE_DB_PORT       → db_port (parsed as integer)
- *   VIBE_DB_USER       → db_user
- *   VIBE_DB_PASS       → db_pass
- *   VIBE_DB_NAME       → db_name
- *   VIBE_DB_SQLITE_PATH → db_sqlite_path
+ *   VIBE_LLM_PROVIDER  â†’ llm_provider
+ *   VIBE_LLM_ENDPOINT  â†’ llm_api_endpoint
+ *   VIBE_LLM_KEY       â†’ llm_api_key
+ *   VIBE_LLM_MODEL     â†’ llm_model
+ *   VIBE_TARGET_URL    â†’ target_local_url
+ *   VIBE_EXCLUDE_PATHS â†’ exclude_paths (comma-separated)
+ *   VIBE_DB_TYPE       â†’ db_type
+ *   VIBE_DB_HOST       â†’ db_host
+ *   VIBE_DB_PORT       â†’ db_port (parsed as integer)
+ *   VIBE_DB_USER       â†’ db_user
+ *   VIBE_DB_PASS       â†’ db_pass
+ *   VIBE_DB_NAME       â†’ db_name
+ *   VIBE_DB_SQLITE_PATH â†’ db_sqlite_path
  *
  * @returns A partial VibeGuardConfig populated from environment variables.
  */
 export function readConfigFromEnv(): Partial<VibeGuardConfig> {
   const config: Partial<VibeGuardConfig> = {};
 
-  // ── LLM Configuration ──────────────────────────────────────────────
+  // â”€â”€ LLM Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const provider = process.env[ENV_LLM_PROVIDER];
   if (provider && VALID_PROVIDERS.has(provider)) {
     config.llm_provider = provider as LLMProvider;
@@ -211,7 +211,7 @@ export function readConfigFromEnv(): Partial<VibeGuardConfig> {
     config.llm_model = model;
   }
 
-  // ── Target Server ──────────────────────────────────────────────────
+  // â”€â”€ Target Server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const targetUrl = process.env[ENV_TARGET_URL];
   if (targetUrl) {
     config.target_local_url = targetUrl;
@@ -225,7 +225,7 @@ export function readConfigFromEnv(): Partial<VibeGuardConfig> {
       .filter(Boolean);
   }
 
-  // ── Database State Guard ───────────────────────────────────────────
+  // â”€â”€ Database State Guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const dbType = process.env[ENV_DB_TYPE];
   if (dbType && VALID_DB_TYPES.has(dbType)) {
     config.db_type = dbType as DbType;
@@ -287,7 +287,7 @@ export function getMissingEnvConfigFields(): string[] {
   return missing;
 }
 
-// ─── Environment Variable Key Constants (for external reference) ───────────────
+// â”€â”€â”€ Environment Variable Key Constants (for external reference) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Export the env var key names so other modules can reference them

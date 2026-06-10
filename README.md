@@ -1,10 +1,12 @@
 # VibeGuard
 
-**CLI-native adversarial local QA daemon** — intercepts `git push`, enforces code quality standards, extracts diffs, analyzes changes via your own LLM, maps endpoints to executable URLs, guards your database, generates red-team payloads, fires live HTTP attacks, auto-generates security patches, runs in CI/CD pipelines with zero config files, and compiles to standalone native binaries — all before your code leaves your machine.
+**CLI-native adversarial local QA daemon** — intercepts `git push`, enforces code quality standards, extracts diffs, analyzes changes via your own LLM, maps endpoints to executable URLs, guards your database, generates red-team payloads, fires live HTTP attacks, auto-generates security patches, runs in CI/CD pipelines with zero config files, compiles to standalone native binaries, and is organized into a domain-driven architecture for open-source contribution — all before your code leaves your machine.
 
+> **Version:** VibeGuard Engine v1.0.0 (2026) · **Phase 11:** Domain-Driven Architecture
+>
 > **Philosophy:** Your code should not leave your machine — or your CI pipeline — until an AI adversary has tried to break it and an AI security engineer has fixed what broke. No external APIs, no runtime dependencies, no config files in production.
 
-> **v1.0.0** · 10-phase engine · 18 source modules · Zero runtime dependencies
+> **v1.0.0** · 11-phase engine · 27 source modules (7 domain directories) · Zero runtime dependencies
 
 > **⚠️ Model Requirement:** VibeGuard performs at **100% capability on unfiltered/uncensored AI models**. The LLM is instructed to think like an adversary — generating real SQL injection payloads, command injection strings, XSS vectors, and auth bypass attacks. **Filtered or safety-aligned models (e.g., some cloud-hosted, RLHF-heavy models) may refuse to generate exploit payloads**, causing Phase 5 (payload generation) and Phase 7 (patch generation) to fall back to deterministic defaults. For full adversarial coverage, use a local unfiltered model (Ollama with Llama 3, Mistral, CodeLlama, etc.) or a model with minimal refusal tuning.
 
@@ -30,6 +32,7 @@
   - [Phase 8 — Minimalist UX & Terminal Output Engine](#phase-8--minimalist-ux--terminal-output-engine)
   - [Phase 9 — CI/CD Mirroring & Enterprise Configuration](#phase-9--cicd-mirroring--enterprise-configuration)
   - [Phase 10 — Open-Source Packaging & Distribution](#phase-10--open-source-packaging--distribution)
+  - [Phase 11 — Domain-Driven Architecture Refactoring](#phase-11--domain-driven-architecture-refactoring)
 - [Pre-Push Hook Behavior](#pre-push-hook-behavior)
 - [Pipeline Flow](#pipeline-flow)
 - [Project Structure](#project-structure)
@@ -58,8 +61,8 @@
         ▼                          ▼                          ▼
 ┌───────────────┐    ┌───────────────────────┐    ┌─────────────────────┐
 │  Phase 5a     │    │  Phase 1+2            │    │  Phase 3            │
-│  compliance.ts│    │  git.ts → parser.ts   │    │  checker.ts         │
-│               │    │  → llm.ts             │    │  mapper.ts          │
+│  compliance/compliance.ts│    │  analyzer/git.ts → analyzer/parser.ts   │    │  infrastructure/checker.ts         │
+│               │    │  → infrastructure/llm.ts             │    │  analyzer/mapper.ts          │
 │ README check  │    │                       │    │                     │
 │ Commit lint   │───▶│ Extract diff          │───▶│ Probe dev server    │
 │               │    │ Strip noise           │    │ Resolve file→URL    │
@@ -70,7 +73,7 @@
                                       │
                          ┌────────────▼────────────┐
                          │  Phase 4                │
-                         │  dbGuard.ts             │
+                         │  infrastructure/dbGuard.ts             │
                          │                         │
                          │  Discover SQL tables    │
                          │  Snapshot DB state      │
@@ -78,9 +81,9 @@
                                       │
                          ┌────────────▼────────────┐
                          │  Phase 5b + 6           │
-                         │  payloadGen.ts          │
-                         │  runner.ts              │
-                         │  assertion.ts           │
+                         │  engine/payloadGen.ts          │
+                         │  engine/runner.ts              │
+                         │  engine/assertion.ts           │
                          │                         │
                          │  Generate red-team      │
                          │  payloads via LLM       │
@@ -93,7 +96,7 @@
                                       │
                          ┌────────────▼────────────┐
                          │  Phase 7                │
-                         │  healer.ts              │
+                         │  engine/healer.ts              │
                          │                         │
                          │  For each vuln found:   │
                          │  Read source file       │
@@ -498,7 +501,7 @@ Grep-friendly: `vibeguard run ... 2>&1 | grep '\[VibeGuard\]'`
 
 ### Phase 1 — Git Diff Extraction
 
-**Module:** [`src/git.ts`](src/git.ts)
+**Module:** [`src/analyzer/git.ts`](src/analyzer/git.ts)
 
 - Resolves the remote tracking branch (`origin/main`) for your current local branch.
 - Runs `git diff <upstream>...HEAD` — the three-dot syntax captures exactly the changes about to be pushed, excluding anything already on the remote.
@@ -508,9 +511,9 @@ Grep-friendly: `vibeguard run ... 2>&1 | grep '\[VibeGuard\]'`
 
 ### Phase 2 — Noise Filter & LLM Analysis
 
-**Modules:** [`src/parser.ts`](src/parser.ts) · [`src/llm.ts`](src/llm.ts)
+**Modules:** [`src/analyzer/parser.ts`](src/analyzer/parser.ts) · [`src/infrastructure/llm.ts`](src/infrastructure/llm.ts)
 
-#### 2a — Noise Filter (`src/parser.ts`)
+#### 2a — Noise Filter (`src/analyzer/parser.ts`)
 
 Runs **locally and deterministically** — the LLM never sees non-functional changes.
 
@@ -521,7 +524,7 @@ Runs **locally and deterministically** — the LLM never sees non-functional cha
 - **Hunk Context Extraction**: Infers the surrounding function, class, method, or route name from git's `@@` hunk headers using 12+ language-specific regex patterns.
 - **Token Estimation**: Character-based heuristic (~3.5 chars/token) for payload sizing.
 
-#### 2b — LLM Analysis (`src/llm.ts`)
+#### 2b — LLM Analysis (`src/infrastructure/llm.ts`)
 
 Sends the filtered diff to your configured LLM with a **Sovereign System Architect** system prompt.
 
@@ -566,9 +569,9 @@ The prompt instructs the model to:
 
 ### Phase 3 — Target Mapper & Connectivity Check
 
-**Modules:** [`src/checker.ts`](src/checker.ts) · [`src/mapper.ts`](src/mapper.ts)
+**Modules:** [`src/infrastructure/infrastructure/checker.ts`](src/infrastructure/infrastructure/checker.ts) · [`src/analyzer/analyzer/mapper.ts`](src/analyzer/analyzer/mapper.ts)
 
-#### 3a — Connectivity Check (`src/checker.ts`)
+#### 3a — Connectivity Check (`src/infrastructure/infrastructure/checker.ts`)
 
 Before any mapping occurs, VibeGuard verifies your local dev server is alive:
 
@@ -581,7 +584,7 @@ Before any mapping occurs, VibeGuard verifies your local dev server is alive:
      Please start your local environment before pushing.
   ```
 
-#### 3b — Route Resolution Engine (`src/mapper.ts`)
+#### 3b — Route Resolution Engine (`src/analyzer/analyzer/mapper.ts`)
 
 Cross-references the LLM's `modified_endpoints` against your local project layout using a **dual-strategy** resolver:
 
@@ -613,7 +616,7 @@ Cross-references the LLM's `modified_endpoints` against your local project layou
 
 ### Phase 4 — Database State Guard
 
-**Module:** [`src/dbGuard.ts`](src/dbGuard.ts)
+**Module:** [`src/infrastructure/infrastructure/dbGuard.ts`](src/infrastructure/infrastructure/dbGuard.ts)
 
 Ensures adversarial test payloads (future Phase 5/6) never leave your database in a dirty state. Uses **zero runtime dependencies** — all operations use Node.js built-ins and native CLI tools.
 
@@ -650,9 +653,9 @@ If any step in the pipeline throws an unhandled error, the `catch` block in `han
 
 ### Phase 5 — Compliance & Payload Generation
 
-**Modules:** [`src/compliance.ts`](src/compliance.ts) · [`src/payloadGen.ts`](src/payloadGen.ts)
+**Modules:** [`src/compliance/compliance/compliance.ts`](src/compliance/compliance/compliance.ts) · [`src/engine/engine/payloadGen.ts`](src/engine/engine/payloadGen.ts)
 
-#### 5a — Compliance Validator (`src/compliance.ts`)
+#### 5a — Compliance Validator (`src/compliance/compliance/compliance.ts`)
 
 Runs **at the very start** of the pipeline — before any network calls, LLM API costs, or database changes. Two mandatory checks:
 
@@ -684,7 +687,7 @@ If either check fails, the push is **aborted immediately** with exit code 1 and 
    Push blocked — compliance checks must pass before analysis proceeds.
 ```
 
-#### 5b — Red-Team Payload Generator (`src/payloadGen.ts`)
+#### 5b — Red-Team Payload Generator (`src/engine/engine/payloadGen.ts`)
 
 Sends the Phase 3 `TargetTargets` + Phase 2 diff context to your LLM with a **Red-Team Security Engineer** system prompt.
 
@@ -726,9 +729,9 @@ If the LLM is unreachable or returns unparseable JSON, VibeGuard falls back to a
 
 ### Phase 6 — Live Execution & Response Assertion
 
-**Modules:** [`src/runner.ts`](src/runner.ts) · [`src/assertion.ts`](src/assertion.ts)
+**Modules:** [`src/engine/engine/runner.ts`](src/engine/engine/runner.ts) · [`src/engine/engine/assertion.ts`](src/engine/engine/assertion.ts)
 
-#### 6a — Parallel HTTP Runner (`src/runner.ts`)
+#### 6a — Parallel HTTP Runner (`src/engine/engine/runner.ts`)
 
 Executes the full `attack_suite` against your local dev server.
 
@@ -741,7 +744,7 @@ Executes the full `attack_suite` against your local dev server.
 - Captures first 2000 characters of each response body for signature scanning.
 - Records latency, status code, and response headers per request.
 
-#### 6b — Security Assertion Engine / The Judge (`src/assertion.ts`)
+#### 6b — Security Assertion Engine / The Judge (`src/engine/engine/assertion.ts`)
 
 Evaluates every HTTP response against three assertion categories. An endpoint is marked **VULNERABLE** if any assertion triggers:
 
@@ -801,7 +804,7 @@ The push passes only if **both** the LLM analysis (Phase 2) AND the live test ru
 
 ### Phase 7 — Self-Healing Patch Engine
 
-**Module:** [`src/healer.ts`](src/healer.ts)
+**Module:** [`src/engine/engine/healer.ts`](src/engine/engine/healer.ts)
 
 When live tests confirm a vulnerability, Phase 7 automatically generates a localized code fix — a security patch — for each vulnerable file. Patches are written to `.vibeguard/patches/` for the developer to review. **Patches are NEVER applied automatically** — you review and apply them manually.
 
@@ -929,7 +932,7 @@ All failures are non-blocking — the push is still blocked (vulnerabilities wer
 
 ### Phase 8 — Minimalist UX & Terminal Output Engine
 
-**Module:** [`src/ux.ts`](src/ux.ts)
+**Module:** [`src/cli/ux.ts`](src/cli/ux.ts)
 
 Provides structured terminal reporting with high-contrast monochrome styling and CI-aware output mode switching.
 
@@ -969,7 +972,7 @@ Provides structured terminal reporting with high-contrast monochrome styling and
 
 ### Phase 9 — CI/CD Mirroring & Enterprise Configuration
 
-**Module:** [`src/ci.ts`](src/ci.ts) · Updates to [`src/config.ts`](src/config.ts) · [`src/hooks.ts`](src/hooks.ts) · [`src/cli.ts`](src/cli.ts)
+**Module:** [`src/compliance/ci.ts`](src/compliance/ci.ts) · Updates to [`src/core/config.ts`](src/core/config.ts) · [`src/core/hooks.ts`](src/core/hooks.ts) · [`src/cli/index.ts`](src/cli/index.ts)
 
 Enables environment-aware execution switching so VibeGuard works identically in local development and headless CI/CD pipelines.
 
@@ -1063,7 +1066,43 @@ vibeguard --version    # VibeGuard Engine v1.0.0 (2026)
 vibeguard -v           # Same output
 ```
 
-**Bundle Size:** ~97 KB minified, zero external dependencies, Node 18+ compatible.
+**Bundle Size:** ~103 KB minified, zero external dependencies, Node 18+ compatible.
+
+---
+
+## Phase 11 — Domain-Driven Architecture Refactoring
+
+**Module:** All 27 source files reorganized into 7 domain directories.
+
+Phase 11 restructured the flat `src/` directory into a professional, domain-driven architecture designed for open-source contribution. No logic was changed — all functions, types, and control flow are preserved exactly as they were.
+
+**Directory Structure:**
+
+| Directory | Responsibility | Files |
+|-----------|---------------|-------|
+| `src/cli/` | Entry points & UI | `index.ts`, `ui.ts`, `ux.ts` |
+| `src/core/` | Foundation & config | `index.ts`, `types.ts`, `config.ts`, `hooks.ts` |
+| `src/analyzer/` | Git & file parsing | `index.ts`, `git.ts`, `parser.ts`, `mapper.ts` |
+| `src/engine/` | Execution & security | `index.ts`, `runner.ts`, `assertion.ts`, `payloadGen.ts`, `healer.ts` |
+| `src/infrastructure/` | External connections | `index.ts`, `llm.ts`, `dbGuard.ts`, `checker.ts` |
+| `src/compliance/` | Validation & CI | `index.ts`, `ci.ts`, `compliance.ts` |
+| `src/utils/` | Shared utilities | `index.ts`, `diff.ts`, `http.ts`, `comment-stripper.ts` |
+
+**Utility Extraction:**
+
+Three files exceeded 200 lines and had separable utility code extracted:
+- [`src/engine/healer.ts`](src/engine/healer.ts) (865→594 lines): LCS unified diff generator → `src/utils/diff.ts`
+- [`src/engine/runner.ts`](src/engine/runner.ts) (414→294 lines): HTTP request builders → `src/utils/http.ts`
+- [`src/analyzer/parser.ts`](src/analyzer/parser.ts) (610→524 lines): Comment/noise stripping → `src/utils/comment-stripper.ts`
+
+**Barrel Exports:** Every directory has an `index.ts` that re-exports its public API. Contributors can import from a single entry point rather than hunting for individual files.
+
+**Dependency Flow (no cycles):**
+```
+cli → engine / analyzer / infrastructure / compliance → core → utils
+```
+
+**Git History:** All 18 file moves used `git mv` to preserve blame and commit history.
 
 ---
 
@@ -1118,7 +1157,7 @@ Developer runs: git push
                    ▼
 ┌─────────────────────────────────────────────┐
 │  PHASE 5a — COMPLIANCE                      │
-│  compliance.ts                              │
+│  compliance/compliance.ts                              │
 │  README check + commit message lint         │
 │  FAIL → exit 1 (abort immediately)          │
 └──────────────────┬──────────────────────────┘
@@ -1128,8 +1167,8 @@ Developer runs: git push
     ▼              ▼              ▼
 ┌────────┐  ┌────────────┐  ┌───────────────┐
 │ PHASE 1│  │ PHASE 2    │  │ PHASE 3       │
-│ git.ts │  │ parser.ts  │  │ checker.ts    │
-│        │  │ llm.ts     │  │ mapper.ts     │
+│ git.ts │  │ parser.ts  │  │ infrastructure/checker.ts    │
+│        │  │ llm.ts     │  │ analyzer/mapper.ts     │
 │        │  │            │  │               │
 │ Extract│  │ Filter CSS │  │ HEAD → server │
 │ diff   │──▶│ Strip docs │──▶│ Resolve URLs  │
@@ -1147,8 +1186,8 @@ Developer runs: git push
          ▼                ▼                ▼
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
 │ PHASE 4a     │  │ PHASE 5b     │  │ PHASE 6      │
-│ dbGuard.ts   │  │ payloadGen.ts│  │ runner.ts    │
-│              │  │              │  │ assertion.ts │
+│ infrastructure/dbGuard.ts   │  │ engine/payloadGen.ts│  │ engine/runner.ts    │
+│              │  │              │  │ engine/assertion.ts │
 │ Snapshot DB  │──▶│ Generate     │──▶│ Fire HTTP    │
 │ (SQLite/     │  │ red-team     │  │ requests     │
 │  MySQL/PG)   │  │ payloads     │  │ (parallel,   │
@@ -1164,7 +1203,7 @@ Developer runs: git push
        │         ▼
        │  ┌─────────────────────┐
        │  │ PHASE 7             │
-       │  │ healer.ts           │
+       │  │ engine/healer.ts           │
        │  │                     │
        │  │ For each vuln:      │
        │  │ Read source file    │
@@ -1181,7 +1220,7 @@ Developer runs: git push
        ▼                        ▼
 ┌─────────────────────┐
 │ PHASE 4b + VERDICT  │
-│ dbGuard.ts          │
+│ infrastructure/dbGuard.ts          │
 │                     │
 │ Restore DB state    │
 │ Combined verdict:   │
@@ -1201,47 +1240,74 @@ Developer runs: git push
 ```
 vibe-guard/
 ├── src/
-│   ├── cli.ts          # CLI entry point — argument parsing, command dispatch, full 10-phase pipeline orchestration
-│   ├── config.ts       # Configuration manager — read/write/validate .vibeguard.json, CI env-var fallback, init wizard
-│   ├── types.ts        # Shared type definitions — all interfaces, types, and constants for all 10 phases
-│   ├── ui.ts           # Low-level terminal UI — monochrome output primitives (muted, action, ok, fail, etc.)
+│   ├── cli/                   # Entry points & UI
+│   │   ├── index.ts           #   CLI entry point — argument parsing, command dispatch, full 10-phase pipeline orchestration
+│   │   ├── ui.ts              #   Low-level terminal UI — monochrome output primitives (muted, action, ok, fail, etc.)
+│   │   └── ux.ts              #   Terminal UX (ANSI styles, threat cards, patch cards, CI/terminal output dispatch)
 │   │
-│   ├── git.ts          # Phase 1 — Git diff extraction, remote resolution, unified diff parser
+│   ├── core/                  # Foundation & Configuration
+│   │   ├── index.ts           #   Barrel export — public API surface for the core module
+│   │   ├── types.ts           #   Shared type definitions — all interfaces, types, and constants for all 10 phases
+│   │   ├── config.ts          #   Configuration manager — read/write/validate .vibeguard.json, CI env-var fallback, init wizard
+│   │   └── hooks.ts           #   Git hook installer — cross-platform pre-push hook (bash + PowerShell)
 │   │
-│   ├── parser.ts       # Phase 2a — Noise filter, comment stripper, file extension whitelist, token estimator
-│   ├── llm.ts          # Phase 2b — LLM API client (OpenAI/Anthropic/custom), prompts, JSON parser, verdict builder
+│   ├── analyzer/              # Git & File Analysis
+│   │   ├── index.ts           #   Barrel export
+│   │   ├── git.ts             #   Phase 1 — Git diff extraction, remote resolution, unified diff parser
+│   │   ├── parser.ts          #   Phase 2a — Noise filter, file extension whitelist, token estimator
+│   │   └── analyzer/mapper.ts          #   Phase 3b — Dual-strategy route resolution (traditional & framework), TargetTargets builder
 │   │
-│   ├── checker.ts      # Phase 3a — Connectivity pre-flight check (1.5s timeout, HEAD→GET fallback)
-│   ├── mapper.ts       # Phase 3b — Dual-strategy route resolution (traditional & framework), TargetTargets builder
+│   ├── engine/                # Execution & Security
+│   │   ├── index.ts           #   Barrel export
+│   │   ├── engine/runner.ts          #   Phase 6a — Parallel HTTP execution engine (8 concurrent, 3s timeout)
+│   │   ├── engine/assertion.ts       #   Phase 6b — Security assertion engine (status code, DB leak, auth bypass — 25+ regex patterns)
+│   │   ├── engine/payloadGen.ts      #   Phase 5b — Red-team adversarial payload generation via LLM + deterministic fallback (70+ values)
+│   │   └── engine/healer.ts          #   Phase 7 — Self-Healing Patch Engine (exploit context, remediation LLM, .patch output)
 │   │
-│   ├── dbGuard.ts      # Phase 4 — Database state guard (SQLite/MySQL/PostgreSQL), table discovery, capture/restore
+│   ├── infrastructure/        # External Connections & State
+│   │   ├── index.ts           #   Barrel export
+│   │   ├── llm.ts             #   Phase 2b — LLM API client (OpenAI/Anthropic/custom), prompts, JSON parser, verdict builder
+│   │   ├── infrastructure/dbGuard.ts         #   Phase 4 — Database state guard (SQLite/MySQL/PostgreSQL), table discovery, capture/restore
+│   │   └── infrastructure/checker.ts         #   Phase 3a — Connectivity pre-flight check (1.5s timeout, HEAD→GET fallback)
 │   │
-│   ├── compliance.ts   # Phase 5a — Pre-push compliance checks (README validation + Conventional Commits enforcement)
-│   ├── payloadGen.ts   # Phase 5b — Red-team adversarial payload generation via LLM + deterministic fallback (70+ values)
+│   ├── compliance/            # Validation & CI
+│   │   ├── index.ts           #   Barrel export
+│   │   ├── ci.ts              #   Phase 9 — CI detection (15 platforms), env-var→config mapping (14 vars), output mode switching
+│   │   └── compliance/compliance.ts      #   Phase 5a — Pre-push compliance checks (README validation + Conventional Commits enforcement)
 │   │
-│   ├── runner.ts       # Phase 6a — Parallel HTTP execution engine (8 concurrent, 3s timeout, GET/POST formatting)
-│   ├── assertion.ts    # Phase 6b — Security assertion engine (status code, DB leak, auth bypass — 25+ regex patterns)
-│   │
-│   ├── healer.ts       # Phase 7 — Self-Healing Patch Engine (exploit context, remediation LLM, LCS unified diff, .patch output)
-│   │
-│   ├── ux.ts           # Phase 8 — Terminal UX (ANSI styles, threat cards, patch cards, CI/terminal output dispatch)
-│   │
-│   └── ci.ts           # Phase 9 — CI detection (15 platforms), env-var→config mapping (14 vars), output mode switching
+│   └── utils/                 # Shared Utilities
+│       ├── index.ts           #   Barrel export
+│       ├── diff.ts            #   LCS-based unified diff generator (extracted from engine/healer.ts)
+│       ├── http.ts            #   HTTP request builders for GET/POST payload execution (extracted from engine/runner.ts)
+│       └── comment-stripper.ts #  Language-agnostic comment/noise detection and removal (extracted from parser.ts)
 │
 ├── scripts/
-│   ├── build.mjs       # Phase 10 — Production build pipeline (esbuild bundle + Node.js SEA native binaries)
-│   └── verify.mjs      # Phase 10 — Post-install verification (Node version, Git, permissions)
+│   ├── build.mjs              # Phase 10 — Production build pipeline (esbuild bundle + Node.js SEA native binaries)
+│   └── verify.mjs             # Phase 10 — Post-install verification (Node version, Git, permissions)
 │
-├── dist/               # Compiled JavaScript output (after `npm run build` or `npm run build:all`)
-│   ├── vibeguard.cjs   #   Production bundle — single minified file (~97 KB, zero deps)
-│   ├── vibeguard       #   Unix shell wrapper
-│   └── vibeguard.cmd   #   Windows .cmd wrapper
+├── dist/                      # Compiled JavaScript output (after `npm run build` or `npm run build:all`)
+│   ├── vibeguard.cjs          #   Production bundle — single minified file (~103 KB, zero deps)
+│   ├── vibeguard              #   Unix shell wrapper
+│   └── vibeguard.cmd          #   Windows .cmd wrapper
 │
-├── .vibeguard.json     # Project configuration (created by `vibeguard init` — .gitignore'd)
-├── package.json        # npm package manifest (zero runtime deps, esbuild as devDep)
-├── tsconfig.json       # TypeScript compiler configuration
-└── README.md           # This file
+├── .vibeguard.json            # Project configuration (created by `vibeguard init` — .gitignore'd)
+├── package.json               # npm package manifest (zero runtime deps, esbuild as devDep)
+├── tsconfig.json              # TypeScript compiler configuration
+└── README.md                  # This file
 ```
+
+### Architectural Principles (Phase 11)
+
+The Phase 11 refactoring introduced a **domain-driven architecture** designed for open-source contribution:
+
+| Principle | Implementation |
+|-----------|---------------|
+| **Separation of Concerns** | 7 domain directories, each with a single responsibility |
+| **Barrel Exports** | Every directory has an `index.ts` exporting its public API — import from one path |
+| **Utility Extraction** | Files >200 lines had standalone utilities extracted to `src/utils/` |
+| **No Logic Changes** | All functions, types, and control flow are preserved exactly — only file locations changed |
+| **Zero Circular Dependencies** | Dependency flow: `cli` → `engine`/`analyzer`/`infrastructure`/`compliance` → `core` → `utils` |
+| **Git History Preserved** | All file moves used `git mv` to maintain blame and history |
 
 ---
 

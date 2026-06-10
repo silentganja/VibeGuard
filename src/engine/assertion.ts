@@ -11,7 +11,7 @@
  *      indicating the payload caused a server-side crash or unhandled exception.
  *
  *   2. Database Leak Assertion:
- *      The response body contains raw database error signatures — SQL syntax
+ *      The response body contains raw database error signatures â€” SQL syntax
  *      errors, PDO exceptions, PostgreSQL query failures, SQLite warnings,
  *      or unhandled runtime stack traces. These indicate information disclosure
  *      and confirm injection vulnerabilities.
@@ -25,9 +25,9 @@
  * category, a human-readable detail, and the matched signature.
  */
 
-import type { AssertionVerdict, AttackPayload, VulnerabilityVector } from "./types";
+import type { AssertionVerdict, AttackPayload, VulnerabilityVector } from "../core/types";
 
-// ─── Database Error Signatures ──────────────────────────────────────────────────
+// â”€â”€â”€ Database Error Signatures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Regex patterns for raw database and infrastructure errors in response bodies.
@@ -77,7 +77,7 @@ const DB_ERROR_SIGNATURES: RegExp[] = [
   /(?:WEB-INF\/web\.xml|\.git\/config|\.env)/i,
 ];
 
-// ─── Auth Bypass Indicators ─────────────────────────────────────────────────────
+// â”€â”€â”€ Auth Bypass Indicators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Keywords and patterns that suggest a response contains privileged or
@@ -118,7 +118,7 @@ const ADMIN_PATH_SEGMENTS = [
   "supervisor", "root", "system",
 ];
 
-// ─── Public API ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Evaluate a single HTTP response against all security assertions.
@@ -138,19 +138,19 @@ export function evaluateResponse(
   const verdicts: AssertionVerdict[] = [];
 
   if (statusCode === null) {
-    // Request completely failed — not a vulnerability, just a network error.
+    // Request completely failed â€” not a vulnerability, just a network error.
     return verdicts;
   }
 
-  // ── Assertion 1: Status Code ──────────────────────────────────────
+  // â”€â”€ Assertion 1: Status Code â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const statusVerdict = checkStatusCode(statusCode, payload);
   if (statusVerdict) verdicts.push(statusVerdict);
 
-  // ── Assertion 2: Database Leak ────────────────────────────────────
+  // â”€â”€ Assertion 2: Database Leak â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const dbLeakVerdict = checkDatabaseLeak(responseBody, payload);
   if (dbLeakVerdict) verdicts.push(dbLeakVerdict);
 
-  // ── Assertion 3: Auth Bypass ──────────────────────────────────────
+  // â”€â”€ Assertion 3: Auth Bypass â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const authBypassVerdict = checkAuthBypass(statusCode, responseBody, payload, responseHeaders);
   if (authBypassVerdict) verdicts.push(authBypassVerdict);
 
@@ -164,7 +164,7 @@ export function isVulnerable(verdicts: AssertionVerdict[]): boolean {
   return verdicts.some((v) => v.triggered);
 }
 
-// ─── Status Code Assertion ──────────────────────────────────────────────────────
+// â”€â”€â”€ Status Code Assertion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function checkStatusCode(
   statusCode: number,
@@ -174,7 +174,7 @@ function checkStatusCode(
     return {
       triggered: true,
       category: "status_code",
-      detail: "Server returned HTTP 500 Internal Server Error — unhandled exception triggered by payload.",
+      detail: "Server returned HTTP 500 Internal Server Error â€” unhandled exception triggered by payload.",
       matched_signature: "HTTP 500",
     };
   }
@@ -184,7 +184,7 @@ function checkStatusCode(
     return {
       triggered: true,
       category: "status_code",
-      detail: "Server returned HTTP 502 Bad Gateway — upstream service may have crashed due to payload.",
+      detail: "Server returned HTTP 502 Bad Gateway â€” upstream service may have crashed due to payload.",
       matched_signature: "HTTP 502",
     };
   }
@@ -193,7 +193,7 @@ function checkStatusCode(
     return {
       triggered: true,
       category: "status_code",
-      detail: "Server returned HTTP 503 Service Unavailable — server may be overloaded or crashed.",
+      detail: "Server returned HTTP 503 Service Unavailable â€” server may be overloaded or crashed.",
       matched_signature: "HTTP 503",
     };
   }
@@ -201,7 +201,7 @@ function checkStatusCode(
   return null;
 }
 
-// ─── Database Leak Assertion ────────────────────────────────────────────────────
+// â”€â”€â”€ Database Leak Assertion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function checkDatabaseLeak(
   responseBody: string,
@@ -220,7 +220,7 @@ function checkDatabaseLeak(
       return {
         triggered: true,
         category: "database_leak",
-        detail: "Response body contains raw database error or stack trace — information disclosure confirming injection vulnerability.",
+        detail: "Response body contains raw database error or stack trace â€” information disclosure confirming injection vulnerability.",
         matched_signature: excerpt,
       };
     }
@@ -229,7 +229,7 @@ function checkDatabaseLeak(
   return null;
 }
 
-// ─── Auth Bypass Assertion ──────────────────────────────────────────────────────
+// â”€â”€â”€ Auth Bypass Assertion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function checkAuthBypass(
   statusCode: number,
@@ -256,7 +256,7 @@ function checkAuthBypass(
       return {
         triggered: true,
         category: "auth_bypass",
-        detail: "Auth bypass confirmed: HTTP 200 with privileged content — " + indicators.join("; "),
+        detail: "Auth bypass confirmed: HTTP 200 with privileged content â€” " + indicators.join("; "),
         matched_signature: indicators[0],
       };
     }
@@ -289,7 +289,7 @@ function checkAuthBypass(
   return null;
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function findAuthBypassIndicators(
   body: string,
