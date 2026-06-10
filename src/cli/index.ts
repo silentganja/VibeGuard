@@ -448,7 +448,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
     if (payloadResult.attackSuite.attack_suite.length > 0) {
       ui.space();
       ui.header("Live Test Execution");
-      testReport = await runTests(payloadResult.attackSuite);
+      testReport = await runTests(payloadResult.attackSuite, config);
 
       // Print per-result details.
       ui.space();

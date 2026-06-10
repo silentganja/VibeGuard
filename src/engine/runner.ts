@@ -1,12 +1,15 @@
 /**
- * VibeGuard - Automated Parallel Test Runner
+ * VibeGuard — Automated Parallel Test Runner
  *
  * Reads the attack_suite generated in Phase 5, executes each payload as an
  * HTTP request against the local dev target, and returns structured execution
  * results for assertion evaluation.
  *
  * Design:
- *   - Parallel execution with a concurrency cap (8 concurrent requests).
+ *   - Configurable concurrency cap (Fix #3) — default 3 concurrent requests
+ *     to prevent self-DoS against lightweight local dev servers.
+ *   - Dynamic auth token seeding (Fix #2) — negotiates a short-lived sandbox
+ *     token before firing payloads so secured endpoints don't false-negative.
  *   - Strict 3-second timeout per payload to prevent the git push from hanging
  *     indefinitely on slow or looping server handlers.
  *   - GET requests serialize payload_data into URL query strings.
@@ -15,10 +18,12 @@
  *   - Response bodies are captured (first 2000 chars) for signature scanning
  *     by the assertion engine.
  *
- * Zero runtime dependencies â€” uses only Node.js built-in fetch.
+ * Zero runtime dependencies — uses only Node.js built-in fetch.
  */
 
+import { execSync } from "node:child_process";
 import type {
+  VibeGuardConfig,
   AttackSuite,
   AttackPayload,
   ExecutionResult,
@@ -26,13 +31,10 @@ import type {
   TestReport,
 } from "../core/types";
 import { evaluateResponse, isVulnerable } from "./assertion";
-import { buildRequest } from "../utils/http";
+import { buildRequest, AuthContext } from "../utils/http";
 import * as ui from "../cli/ui";
 
-// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-/** Maximum concurrent HTTP requests. */
-const MAX_CONCURRENCY = 8;
+// ─── Constants ───────────────────────────────────────────────────────────────────
 
 /** Per-request timeout in milliseconds (3 seconds per spec). */
 const REQUEST_TIMEOUT_MS = 3_000;
@@ -40,21 +42,26 @@ const REQUEST_TIMEOUT_MS = 3_000;
 /** Maximum characters of response body to capture for signature scanning. */
 const MAX_RESPONSE_BODY_CHARS = 2_000;
 
-/** User-agent sent with test requests. */
-const USER_AGENT = "VibeGuard/0.9.0 (adversarial-payload-test)";
+/** Maximum time to wait for the token generation command (ms). */
+const TOKEN_GEN_TIMEOUT_MS = 15_000;
 
-// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Public API ──────────────────────────────────────────────────────────────────
 
 /**
  * Execute the full attack suite against the local dev server.
  *
- * Runs payloads in parallel with a concurrency cap. Each payload is executed
- * as an HTTP request, the response is captured, and assertions are evaluated.
+ * Runs payloads in parallel with a concurrency cap from config. Each payload
+ * is executed as an HTTP request, the response is captured, and assertions
+ * are evaluated.
  *
- * @param attackSuite - The attack payloads from Phase 5.
+ * @param attackSuite — The attack payloads from Phase 5.
+ * @param config      — Validated VibeGuard config (for auth & concurrency settings).
  * @returns A TestReport aggregating all execution results and verdicts.
  */
-export async function runTests(attackSuite: AttackSuite): Promise<TestReport> {
+export async function runTests(
+  attackSuite: AttackSuite,
+  config?: VibeGuardConfig
+): Promise<TestReport> {
   if (attackSuite.attack_suite.length === 0) {
     return {
       results: [],
@@ -62,19 +69,26 @@ export async function runTests(attackSuite: AttackSuite): Promise<TestReport> {
       testsPassed: 0,
       testsErrored: 0,
       overallPass: true,
-      summary: "No payloads to execute â€” skipping test run.",
+      summary: "No payloads to execute — skipping test run.",
     };
   }
 
+  const concurrency = config?.max_concurrent_requests ?? 3;
   const totalPayloads = attackSuite.attack_suite.length;
+
+  // Fix #2: Negotiate an auth token if auth_seeding is configured.
+  const authContext = resolveAuthContext(config);
+
   ui.action(
     "Executing " + String(totalPayloads) + " payload(s) against local server " +
-    "(concurrency: " + String(MAX_CONCURRENCY) + ", timeout: " +
-    String(REQUEST_TIMEOUT_MS / 1000) + "s)..."
+    "(concurrency: " + String(concurrency) + ", timeout: " +
+    String(REQUEST_TIMEOUT_MS / 1000) + "s)" +
+    (authContext ? ", auth: " + authContext.auth_type : "") +
+    "..."
   );
 
   // Execute in parallel batches.
-  const results = await executeParallel(attackSuite.attack_suite, MAX_CONCURRENCY);
+  const results = await executeParallel(attackSuite.attack_suite, concurrency, authContext);
 
   // Aggregate statistics.
   let vulnerabilitiesFound = 0;
@@ -106,7 +120,51 @@ export async function runTests(attackSuite: AttackSuite): Promise<TestReport> {
   };
 }
 
-// â”€â”€â”€ Parallel Execution Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Auth Token Resolution (Fix #2) ──────────────────────────────────────────────
+
+/**
+ * Resolve an AuthContext from the config's auth_seeding block.
+ *
+ * Runs the token_generation_command via shell and captures its stdout as the
+ * token value. Returns null if auth_seeding is not configured or fails.
+ */
+function resolveAuthContext(config?: VibeGuardConfig): AuthContext | undefined {
+  if (!config?.auth_seeding) return undefined;
+
+  const { auth_type, token_generation_command, header_name, cookie_name, query_param_name } = config.auth_seeding;
+
+  ui.muted("Generating sandbox auth token via: " + token_generation_command);
+
+  let token: string;
+  try {
+    token = execSync(token_generation_command, {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: TOKEN_GEN_TIMEOUT_MS,
+    }).trim();
+
+    if (!token) {
+      ui.warn("Auth token generation command returned empty output. Proceeding without auth.");
+      return undefined;
+    }
+  } catch (err: unknown) {
+    const msg = (err as Error).message ?? String(err);
+    ui.warn("Auth token generation failed: " + msg + ". Proceeding without auth.");
+    return undefined;
+  }
+
+  ui.ok("Sandbox token acquired (" + String(token.length) + " chars).");
+
+  return {
+    token,
+    auth_type,
+    header_name,
+    cookie_name,
+    query_param_name,
+  };
+}
+
+// ─── Parallel Execution Engine ───────────────────────────────────────────────────
 
 /**
  * Execute an array of payloads with a concurrency cap.
@@ -114,10 +172,14 @@ export async function runTests(attackSuite: AttackSuite): Promise<TestReport> {
  * Uses a simple worker-pool pattern: launch up to `concurrency` requests
  * simultaneously, and as each completes, launch the next. This keeps the
  * server under controlled load without a dependency on a concurrency library.
+ *
+ * Fix #3: The concurrency cap is now configurable (default 3) instead of
+ * hardcoded at 8, preventing self-DoS against lightweight local dev servers.
  */
 async function executeParallel(
   payloads: AttackPayload[],
-  concurrency: number
+  concurrency: number,
+  authContext?: AuthContext
 ): Promise<ExecutionResult[]> {
   const results: ExecutionResult[] = new Array(payloads.length);
   let nextIndex = 0;
@@ -125,7 +187,7 @@ async function executeParallel(
   async function worker(): Promise<void> {
     while (nextIndex < payloads.length) {
       const index = nextIndex++;
-      results[index] = await executeOne(payloads[index]);
+      results[index] = await executeOne(payloads[index], authContext);
     }
   }
 
@@ -140,18 +202,21 @@ async function executeParallel(
   return results;
 }
 
-// â”€â”€â”€ Single Payload Execution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Single Payload Execution ────────────────────────────────────────────────────
 
 /**
  * Execute a single adversarial payload against its target URL.
  *
  * Formats the request based on HTTP method:
- *   GET  â†’ query string parameters
- *   POST â†’ application/x-www-form-urlencoded body
+ *   GET  → query string parameters
+ *   POST → application/x-www-form-urlencoded body
  *
  * Includes a strict timeout and captures response metadata for assertion.
  */
-async function executeOne(payload: AttackPayload): Promise<ExecutionResult> {
+async function executeOne(
+  payload: AttackPayload,
+  authContext?: AuthContext
+): Promise<ExecutionResult> {
   const startTime = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -163,7 +228,7 @@ async function executeOne(payload: AttackPayload): Promise<ExecutionResult> {
   let error: string | null = null;
 
   try {
-    const { url, init } = buildRequest(payload);
+    const { url, init } = buildRequest(payload, authContext);
     init.signal = controller.signal;
 
     const response = await fetch(url, init);
@@ -215,7 +280,7 @@ async function executeOne(payload: AttackPayload): Promise<ExecutionResult> {
   };
 }
 
-// â”€â”€â”€ Summary Builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Summary Builder ─────────────────────────────────────────────────────────────
 
 function buildSummary(
   results: ExecutionResult[],
@@ -234,7 +299,7 @@ function buildSummary(
 
   if (overallPass) {
     lines.push(
-      "Result: ALL TESTS PASSED â€” no vulnerabilities confirmed."
+      "Result: ALL TESTS PASSED — no vulnerabilities confirmed."
     );
     lines.push(
       "  Passed: " + String(testsPassed) +
@@ -243,7 +308,7 @@ function buildSummary(
     );
   } else {
     lines.push(
-      "Result: VULNERABILITIES FOUND â€” " +
+      "Result: VULNERABILITIES FOUND — " +
       String(vulnerabilitiesFound) + " test(s) confirmed security issues."
     );
     lines.push(
@@ -285,7 +350,7 @@ function buildSummary(
       if (r.completed) continue;
       lines.push(
         "  > " + r.payload.method + " " + r.payload.target_url +
-        " â€” " + (r.error ?? "Unknown error")
+        " — " + (r.error ?? "Unknown error")
       );
     }
   }

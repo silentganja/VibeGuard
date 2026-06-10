@@ -49,6 +49,11 @@ const DEFAULT_CONFIG: VibeGuardConfig = {
   export_tests_enabled: true,
   export_tests_framework: "bash",
   export_tests_dir: ".vibeguard/tests",
+  // Fix #1: Server Lifetime Management defaults
+  server_start_command: "",
+  server_stop_command: "",
+  // Fix #3: Concurrency Throttling default
+  max_concurrent_requests: 3,
 };
 
 // â”€â”€â”€ Project Root Discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -194,6 +199,46 @@ export function validateConfig(raw: Partial<VibeGuardConfig>): string[] {
   }
   if (raw.webhook_teams !== undefined && typeof raw.webhook_teams !== "string") {
     errors.push("webhook_teams must be a URL string");
+  }
+
+  // Fix #1: Server Lifetime Management validation (all fields optional)
+  if (raw.server_start_command !== undefined && typeof raw.server_start_command !== "string") {
+    errors.push("server_start_command must be a string");
+  }
+  if (raw.server_stop_command !== undefined && typeof raw.server_stop_command !== "string") {
+    errors.push("server_stop_command must be a string");
+  }
+
+  // Fix #2: Auth Seeding validation (all fields optional)
+  if (raw.auth_seeding !== undefined) {
+    if (typeof raw.auth_seeding !== "object" || raw.auth_seeding === null) {
+      errors.push("auth_seeding must be an object with auth_type and token_generation_command");
+    } else {
+      const auth = raw.auth_seeding as unknown as Record<string, unknown>;
+      const VALID_AUTH_TYPES = new Set(["bearer", "header", "cookie", "query"]);
+      if (!auth.auth_type || !VALID_AUTH_TYPES.has(auth.auth_type as string)) {
+        errors.push('auth_seeding.auth_type must be one of: "bearer" | "header" | "cookie" | "query"');
+      }
+      if (!auth.token_generation_command || typeof auth.token_generation_command !== "string") {
+        errors.push("auth_seeding.token_generation_command is required (shell command that prints token to stdout)");
+      }
+      if (auth.auth_type === "header" && (!auth.header_name || typeof auth.header_name !== "string")) {
+        errors.push("auth_seeding.header_name is required when auth_type is \"header\"");
+      }
+      if (auth.auth_type === "cookie" && (!auth.cookie_name || typeof auth.cookie_name !== "string")) {
+        errors.push("auth_seeding.cookie_name is required when auth_type is \"cookie\"");
+      }
+      if (auth.auth_type === "query" && (!auth.query_param_name || typeof auth.query_param_name !== "string")) {
+        errors.push("auth_seeding.query_param_name is required when auth_type is \"query\"");
+      }
+    }
+  }
+
+  // Fix #3: Concurrency Throttling validation
+  if (raw.max_concurrent_requests !== undefined) {
+    if (typeof raw.max_concurrent_requests !== "number" || raw.max_concurrent_requests < 1 || raw.max_concurrent_requests > 50) {
+      errors.push("max_concurrent_requests must be a number between 1 and 50");
+    }
   }
 
   return errors;

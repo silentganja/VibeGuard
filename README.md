@@ -4,7 +4,7 @@
 
 VibeGuard installs a pre-push Git hook that triggers automatically before every `git push`. It extracts your diff, sends it to your own LLM for adversarial analysis, fires live exploit payloads against your local dev server, judges the responses, generates security patches, exports regression tests, and alerts your team — all before the push leaves your machine.
 
-> **v1.0.0** · 30+ source modules · 7 domain directories · Zero runtime dependencies · ~122 KB production bundle
+> **v1.1.0** · 30+ source modules · 7 domain directories · Zero runtime dependencies · ~122 KB production bundle · **5 System Hardening Fixes**
 >
 > **⚠️ Model Requirement:** VibeGuard performs at **100% capability on unfiltered/uncensored AI models**. Filtered or safety-aligned models (RLHF-heavy, cloud-hosted) may refuse to generate exploit payloads, causing the red-team engine to fall back to deterministic defaults. For full adversarial coverage, use a local unfiltered model (Ollama + Llama 3 / Mistral).
 
@@ -40,19 +40,21 @@ VibeGuard installs a pre-push Git hook that triggers automatically before every 
                                    │
         ┌──────────────────────────┼──────────────────────────┐
         ▼                          ▼                          ▼
-┌───────────────┐    ┌───────────────────────┐    ┌─────────────────────┐
-│  Compliance   │    │  Diff Analysis        │    │  Connectivity       │
-│  README check │───▶│  git → parser → llm   │───▶│  Probe dev server   │
-│  Commit lint  │    │  Filter noise         │    │  Map file → URL     │
-└───────────────┘    └───────────────────────┘    └──────────┬──────────┘
+┌───────────────┐    ┌───────────────────────┐    ┌──────────────────────┐
+│  Compliance   │    │  Diff Analysis        │    │  Connectivity        │
+│  README check │───▶│  merge-base → parser  │───▶│  Probe dev server    │
+│  Commit lint  │    │  Filter noise         │    │  Auto-start if down  │
+└───────────────┘    │  Ignore directives    │    │  Map file → URL      │
+                     └───────────────────────┘    └──────────┬───────────┘
                                                              │
                          ┌───────────────────────────────────┘
                          ▼
 ┌────────────────────┐    ┌───────────────────────┐    ┌────────────────────┐
 │  DB State Guard    │    │  Red-Team Execution    │    │  Self-Healing      │
-│  Snapshot tables   │───▶│  Generate attack       │───▶│  LLM remediation   │
-│  (MySQL/PG/SQLite) │    │  Fire HTTP (parallel)  │    │  Unified diff patch│
-└────────────────────┘    │  Assertion judgment    │    └──────────┬─────────┘
+│  Snapshot tables   │───▶│  Auth token seeding    │───▶│  LLM remediation   │
+│  (MySQL/PG/SQLite) │    │  Generate payloads     │    │  Unified diff patch│
+└────────────────────┘    │  Fire HTTP (capped 3)  │    └──────────┬─────────┘
+                          │  Assertion judgment    │               │
                           └───────────────────────┘               │
                                                                   │
 ┌─────────────────────────────────────────────────────────────────┘
@@ -62,6 +64,7 @@ VibeGuard installs a pre-push Git hook that triggers automatically before every 
 │  Export regression test │
 │  Notify team (Slack/DC) │
 │  Restore DB state       │
+│  Stop server (if auto)  │
 │  Pass → exit 0 (push)   │
 │  Any failure → exit 1   │
 └────────────────────────┘
@@ -175,7 +178,17 @@ On every `git push`, VibeGuard validates your README and commit message, extract
   "webhook_teams": "",
   "export_tests_enabled": true,
   "export_tests_framework": "bash",
-  "export_tests_dir": ".vibeguard/tests"
+  "export_tests_dir": ".vibeguard/tests",
+  "server_start_command": "docker-compose up -d local-api",
+  "server_stop_command": "docker-compose down",
+  "max_concurrent_requests": 3,
+  "auth_seeding": {
+    "auth_type": "bearer",
+    "token_generation_command": "node scripts/generate-sandbox-token.js",
+    "header_name": "X-API-Key",
+    "cookie_name": "sandbox_token",
+    "query_param_name": "token"
+  }
 }
 ```
 
@@ -198,6 +211,38 @@ On every `git push`, VibeGuard validates your README and commit message, extract
 | `export_tests_enabled` | boolean | No | Auto-generate regression tests. Default: true. |
 | `export_tests_framework` | `"jest"` \| `"bash"` | No | Test format. Default: `"bash"`. |
 | `export_tests_dir` | string | No | Test output directory. Default: `".vibeguard/tests"`. |
+| `server_start_command` | string | No | Shell command to auto-start the dev server if unreachable (Fix #1). |
+| `server_stop_command` | string | No | Shell command to gracefully stop the dev server after tests (Fix #1). |
+| `max_concurrent_requests` | number | No | Max parallel HTTP requests during testing. Default: `3` (Fix #3). |
+| `auth_seeding` | object | No | Dynamic token negotiation for secured endpoints (Fix #2). See below. |
+
+### Auth Seeding (Fix #2)
+
+When endpoints require authentication, VibeGuard can negotiate a short-lived sandbox token before firing adversarial payloads. This prevents false-negative 401/403 results against secured routes.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `auth_seeding.auth_type` | `"bearer"` \| `"header"` \| `"cookie"` \| `"query"` | Yes | How to inject the token into requests. |
+| `auth_seeding.token_generation_command` | string | Yes | Shell command that prints a valid token to stdout. |
+| `auth_seeding.header_name` | string | When `auth_type: "header"` | Custom header name (e.g. `X-API-Key`). |
+| `auth_seeding.cookie_name` | string | When `auth_type: "cookie"` | Cookie name for the token. |
+| `auth_seeding.query_param_name` | string | When `auth_type: "query"` | Query parameter name for the token. |
+
+### Inline Ignore Directives (Fix #4)
+
+Suppress false positives on intentional low-level code by annotating source lines directly:
+
+```php
+// @vibeguard-ignore sql_injection
+$raw_query = "SELECT * FROM logs WHERE id = " . $untrusted_id;
+```
+
+```python
+# @vibeguard-ignore rce,xss
+os.system(user_provided_cmd)  # intentionally sandboxed upstream
+```
+
+Supported vectors: `sql_injection`, `xss`, `rce`, `auth_bypass`, `privilege_escalation`, `input_fuzzing`, `path_traversal`, `ssrf`, `idor`, `race_condition`, `deserialization`, `information_disclosure`, `misconfiguration`, `other`. Comma-separate multiple vectors. Works across all comment styles (`//`, `#`, `/* */`).
 
 <details>
 <summary><strong>LLM Provider Setup Examples</strong></summary>
@@ -301,7 +346,9 @@ vibeguard run --local "$BRANCH" --remote origin/main
 <details>
 <summary><strong>Diff Extraction & Noise Filtering</strong></summary>
 
-Captures the exact changes about to be pushed via `git diff <upstream>...HEAD`. Strips non-functional noise — comments, doc blocks, CSS, lockfiles, whitespace — before sending to the LLM. File extension whitelist covers 50+ languages. Outputs a token-optimized payload with a discarded-file audit trail.
+<strong>Intelligent Merge-Base Diff Tracking (Fix #5):</strong> Computes the cryptographic common ancestor via `git merge-base HEAD @{u}` before computing the diff. This prevents nested feature branches (feature/nested → feature/parent → main) from capturing hundreds of lines of unrelated team changes in the diff — only the developer's own code is analyzed.
+
+Captures the exact changes about to be pushed via `git diff <merge-base>...HEAD`. Strips non-functional noise — comments, doc blocks, CSS, lockfiles, whitespace — before sending to the LLM. File extension whitelist covers 50+ languages. Supports inline `@vibeguard-ignore <vector>` directives for suppressing false positives on intentionally dangerous but safe code. Outputs a token-optimized payload with a discarded-file audit trail and ignored-vector summary.
 
 📁 [`src/analyzer/git.ts`](src/analyzer/git.ts) · [`src/analyzer/parser.ts`](src/analyzer/parser.ts)
 </details>
@@ -325,7 +372,9 @@ SHA-256 hashes the sanitized diff to cache LLM responses locally (`.vibeguard/ca
 <details>
 <summary><strong>Route Resolution & Connectivity</strong></summary>
 
-Dual-strategy URL mapping: traditional (file path → URL with public subfolder detection) and framework-aware (Laravel, Symfony, Next.js, Go, Rails via sentinel files). Probes `target_local_url` before analysis begins — blocks immediately if the dev server is unreachable.
+Dual-strategy URL mapping: traditional (file path → URL with public subfolder detection) and framework-aware (Laravel, Symfony, Next.js, Go, Rails via sentinel files). Probes `target_local_url` before analysis begins.
+
+**Server Lifetime Management (Fix #1):** If the health check fails, VibeGuard automatically runs `server_start_command` to spin up your Docker container or local backend, waits for warmup, retries the probe, then runs all tests. After the pipeline completes, `server_stop_command` gracefully tears down the environment. No more "forgot to start Docker" push blocks.
 
 📁 [`src/analyzer/mapper.ts`](src/analyzer/mapper.ts) · [`src/infrastructure/checker.ts`](src/infrastructure/checker.ts)
 </details>
@@ -349,9 +398,11 @@ A "Red-Team Security Engineer" persona generates context-aware attack payloads t
 <details>
 <summary><strong>Live HTTP Execution & Assertions</strong></summary>
 
-Fires payloads in parallel against your local dev server (8 concurrent, 3s timeout). GET requests become query strings; POST requests are form-urlencoded (auto-detects JSON). Captures response body, headers, status code, and latency. Three assertion categories: status code (500/502/503), database leak (25+ regex signatures), and auth bypass (admin panel detection, user data exposure).
+Fires payloads in parallel against your local dev server with a configurable concurrency cap (default 3, Fix #3) to prevent self-DoS against lightweight single-threaded servers. Strict 3-second timeout per request. GET requests become query strings; POST requests are form-urlencoded (auto-detects JSON). Captures response body, headers, status code, and latency. Three assertion categories: status code (500/502/503), database leak (25+ regex signatures), and auth bypass (admin panel detection, user data exposure).
 
-📁 [`src/engine/runner.ts`](src/engine/runner.ts) · [`src/engine/assertion.ts`](src/engine/assertion.ts)
+**Dynamic Auth Token Seeding (Fix #2):** Before firing payloads, VibeGuard can negotiate a short-lived sandbox token via `token_generation_command` and inject it into every request as a Bearer token, custom header, cookie, or query parameter. This ensures secured endpoints return meaningful vulnerability signals rather than false-negative 401s.
+
+📁 [`src/engine/runner.ts`](src/engine/runner.ts) · [`src/engine/assertion.ts`](src/engine/assertion.ts) · [`src/utils/http.ts`](src/utils/http.ts)
 </details>
 
 <details>
@@ -422,13 +473,13 @@ vibe-guard/
 │   │
 │   ├── analyzer/              # Git & File Analysis
 │   │   ├── index.ts           #   Barrel export
-│   │   ├── git.ts             #   Diff extraction, unified diff parser
-│   │   ├── parser.ts          #   Noise filter, comment stripper, token estimator
+│   │   ├── git.ts             #   Diff extraction, merge-base tracking (Fix #5), unified diff parser
+│   │   ├── parser.ts          #   Noise filter, comment stripper, token estimator, @vibeguard-ignore (Fix #4)
 │   │   └── mapper.ts          #   Route resolution (traditional + framework)
 │   │
 │   ├── engine/                # Execution & Security
 │   │   ├── index.ts           #   Barrel export
-│   │   ├── runner.ts          #   Parallel HTTP execution (8 concurrent, 3s timeout)
+│   │   ├── runner.ts          #   Parallel HTTP execution (configurable concurrency, auth seeding)
 │   │   ├── assertion.ts       #   Security assertions (25+ regex patterns)
 │   │   ├── payloadGen.ts      #   Red-team payload gen + deterministic fallback (70+ values)
 │   │   ├── healer.ts          #   Self-healing patch engine (LCS diff, LLM remediation)
@@ -438,7 +489,7 @@ vibe-guard/
 │   │   ├── index.ts           #   Barrel export
 │   │   ├── llm.ts             #   LLM client (OpenAI/Anthropic/custom) + cache + retry
 │   │   ├── dbGuard.ts         #   DB guard (SQLite/MySQL/PostgreSQL) + table discovery
-│   │   ├── checker.ts         #   Connectivity pre-flight check
+│   │   ├── checker.ts         #   Connectivity pre-flight + server lifecycle (Fix #1)
 │   │   └── webhooks.ts        #   CI notifications (Slack/Discord/Teams)
 │   │
 │   ├── compliance/            # Validation & CI
@@ -449,7 +500,7 @@ vibe-guard/
 │   └── utils/                 # Shared Utilities
 │       ├── index.ts           #   Barrel export
 │       ├── diff.ts            #   LCS-based unified diff generator
-│       ├── http.ts            #   HTTP request builders (GET/POST)
+│       ├── http.ts            #   HTTP request builders (GET/POST, auth-aware)
 │       ├── comment-stripper.ts #  Language-agnostic comment detection & removal
 │       ├── cache.ts           #   SHA-256 diff hash cache + file-system store
 │       └── logger.ts          #   Structured JSON Lines logger + log rotation
@@ -512,6 +563,18 @@ The model returned non-JSON output. Try a different model. The built-in fallback
 
 **"No upstream tracking branch found"**
 Set the upstream: `git push --set-upstream origin <branch>`.
+
+**"Server start command failed"**
+VibeGuard tried to auto-start your dev server but the command failed. Check `server_start_command` in `.vibeguard.json`. Example: `"docker-compose up -d local-api"` or `"npm run dev"`.
+
+**"Auth token generation failed"**
+The `token_generation_command` in your `auth_seeding` config failed or returned empty. Verify the command prints a valid token to stdout.
+
+**"Connection refused" persists despite auto-start**
+The server may need more warmup time. Use a blocking start command (`docker-compose up -d --wait`) or increase `SERVER_START_WARMUP_MS` in the source.
+
+**"max_concurrent_requests" validation error**
+Must be 1–50. Lightweight single-threaded servers: keep at 2–3. Multi-threaded (Go, Node cluster): 5–8 is safe.
 
 **"[VibeGuard Critical Exception]"**
 An unhandled engine crash occurred. Full diagnostics are in `.vibeguard/logs/engine_debug.log`. This should never happen — please file a bug report.

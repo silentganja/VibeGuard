@@ -1,22 +1,24 @@
 /**
- * VibeGuard â€” Git Diff Extractor
+ * VibeGuard — Git Diff Extractor
  *
  * Core engine that runs when the pre-push hook fires. Extracts the exact
  * code changes about to be pushed and parses them into a structured memory
  * footprint ready for LLM consumption (Phase 2).
  *
  * Operations:
- *   Â· Resolves the remote tracking branch for the current local branch.
- *   Â· Runs `git diff <remote>...HEAD` to get the changes being pushed.
- *   Â· Parses the unified diff into structured DiffFile / DiffHunk / DiffLine objects.
- *   Â· Respects `.vibeguard.json` exclude_paths.
+ *   · Resolves the remote tracking branch for the current local branch.
+ *   · Computes the true cryptographic merge-base via `git merge-base HEAD @{u}`
+ *     (Fix #5) to avoid over-capturing unrelated team changes on nested branches.
+ *   · Runs `git diff <merge-base>...HEAD` to get only the developer's own changes.
+ *   · Parses the unified diff into structured DiffFile / DiffHunk / DiffLine objects.
+ *   · Respects `.vibeguard.json` exclude_paths.
  */
 
 import { execSync } from "node:child_process";
 import type { DiffResult, DiffFile, DiffHunk, DiffLine, FileStatus } from "../core/types";
 import { readConfig } from "../core/config";
 
-// â”€â”€â”€ Low-level Git Commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Low-level Git Commands ──────────────────────────────────────────────────────
 
 /**
  * Run a git command and return trimmed stdout.
@@ -28,7 +30,7 @@ function git(args: string[], cwd?: string): string {
       cwd: cwd ?? process.cwd(),
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
-      maxBuffer: 50 * 1024 * 1024, // 50 MB â€” generous for large diffs
+      maxBuffer: 50 * 1024 * 1024, // 50 MB — generous for large diffs
     });
     return result.trim();
   } catch (err: unknown) {
@@ -39,7 +41,7 @@ function git(args: string[], cwd?: string): string {
 
 /**
  * Get the remote tracking branch for the given local branch.
- * Example: "main" â†’ "origin/main"
+ * Example: "main" → "origin/main"
  * Returns null if no upstream is configured.
  */
 function getUpstream(localBranch: string): string | null {
@@ -47,20 +49,75 @@ function getUpstream(localBranch: string): string | null {
     const upstream = git(["rev-parse", "--abbrev-ref", `${localBranch}@{u}`]);
     return upstream || null;
   } catch {
-    // No upstream configured â€” fall back to origin/<branch>
+    // No upstream configured — fall back to origin/<branch>
     return `origin/${localBranch}`;
   }
 }
 
 /**
- * Run the diff between the remote tracking branch and HEAD.
+ * Fix #5: Compute the cryptographic merge-base between HEAD and the upstream.
  *
- * Uses the three-dot syntax `<remote>...HEAD` which shows changes on the
- * local branch since it diverged from the remote â€” this is exactly the set
- * of changes about to be pushed, excluding anything already on the remote.
+ * This finds the single best common ancestor commit — the precise point where
+ * the local branch diverged from the remote tracking branch. Using the merge-base
+ * ensures that for deeply nested feature branches (e.g. feature/nested branched
+ * off feature/parent branched off main), the diff ONLY contains the developer's
+ * own changes and not hundreds of lines from intermediate parent branches.
+ *
+ * The merge-base approach replaces the naive `@{u}...HEAD` three-dot diff which
+ * can over-capture when the upstream tracking branch is stale or nested.
+ *
+ * @param localBranch — The local branch name (e.g. "feature/nested").
+ * @returns The merge-base commit SHA, or null if it cannot be determined.
  */
-function runDiff(upstream: string, excludePaths: string[]): string {
-  const args = ["diff", "--unified=3", `${upstream}...HEAD`];
+function getMergeBase(localBranch: string): string | null {
+  try {
+    // Resolve the upstream ref first.
+    const upstream = git(["rev-parse", "--abbrev-ref", `${localBranch}@{u}`]);
+    if (!upstream) return null;
+
+    // Compute the merge-base: the common ancestor of HEAD and @{u}.
+    const mergeBase = git(["merge-base", "HEAD", `${localBranch}@{u}`]);
+    if (!mergeBase || mergeBase.length !== 40) {
+      return null;
+    }
+
+    return mergeBase;
+  } catch {
+    // Fall back: try merge-base with origin/main as a safe default.
+    try {
+      const mergeBase = git(["merge-base", "HEAD", "origin/main"]);
+      if (mergeBase && mergeBase.length === 40) {
+        return mergeBase;
+      }
+    } catch {
+      // Can't determine merge-base; caller will fall back to upstream ref.
+    }
+    return null;
+  }
+}
+
+/**
+ * Run the diff between the merge-base and HEAD.
+ *
+ * Uses the three-dot syntax with the merge-base SHA to get exactly the changes
+ * on the local branch since it diverged. Falls back to `@{u}...HEAD` if the
+ * merge-base cannot be determined.
+ *
+ * Fix #5: The merge-base is the cryptographic common ancestor, ensuring that
+ * nested branches don't capture unrelated team changes in the diff.
+ */
+function runDiff(
+  localBranch: string,
+  upstream: string,
+  excludePaths: string[]
+): string {
+  // Compute the true merge-base for precise diff scoping.
+  const mergeBase = getMergeBase(localBranch);
+
+  // Use merge-base if available, otherwise fall back to the upstream ref.
+  const baseRef = mergeBase ?? upstream;
+
+  const args = ["diff", "--unified=3", `${baseRef}...HEAD`];
 
   // Add exclusions
   for (const p of excludePaths) {
@@ -73,16 +130,16 @@ function runDiff(upstream: string, excludePaths: string[]): string {
   return git(args);
 }
 
-// â”€â”€â”€ Diff Parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Diff Parser ─────────────────────────────────────────────────────────────────
 
 /**
  * Parse a unified diff string into a structured DiffResult.
  *
  * Handles:
- *   Â· File headers: diff --git a/X b/Y
- *   Â· Extended headers: new file mode, deleted file mode, rename from/to
- *   Â· Hunks: @@ -oldStart,oldCount +newStart,newCount @@ context
- *   Â· Lines: +additions, -deletions, context
+ *   · File headers: diff --git a/X b/Y
+ *   · Extended headers: new file mode, deleted file mode, rename from/to
+ *   · Hunks: @@ -oldStart,oldCount +newStart,newCount @@ context
+ *   · Lines: +additions, -deletions, context
  */
 function parseDiff(raw: string): DiffResult {
   const files: DiffFile[] = [];
@@ -238,13 +295,16 @@ function parseDiff(raw: string): DiffResult {
   };
 }
 
-// â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Public API ──────────────────────────────────────────────────────────────────
 
 /**
  * Extract the full structured diff for a branch about to be pushed.
  *
- * @param localBranch  â€” the local branch name (e.g. "feature/login")
- * @param excludePaths â€” optional override for exclude_paths from config
+ * Fix #5: Uses `git merge-base HEAD @{u}` to find the cryptographic common
+ * ancestor, ensuring that nested branches don't capture unrelated team changes.
+ *
+ * @param localBranch  — the local branch name (e.g. "feature/login")
+ * @param excludePaths — optional override for exclude_paths from config
  */
 export function extractDiff(
   localBranch: string,
@@ -261,10 +321,10 @@ export function extractDiff(
     );
   }
 
-  const raw = runDiff(upstream, excludes);
+  const raw = runDiff(localBranch, upstream, excludes);
 
   if (!raw) {
-    // No diff â€” nothing to push (or identical to remote)
+    // No diff — nothing to push (or identical to remote)
     return {
       files: [],
       totalAdditions: 0,
@@ -279,13 +339,24 @@ export function extractDiff(
 /**
  * Get the list of changed file paths only (lightweight check).
  * Faster than full diff parsing when you just need the file list.
+ *
+ * Fix #5: Uses merge-base for precise file scoping.
  */
 export function getChangedFiles(localBranch: string): string[] {
   const upstream = getUpstream(localBranch);
   if (!upstream) return [];
 
   try {
-    const raw = git(["diff", "--name-only", `${upstream}...HEAD`]);
+    // Use merge-base for precise file list.
+    let baseRef: string;
+    try {
+      const mergeBase = git(["merge-base", "HEAD", `${localBranch}@{u}`]);
+      baseRef = (mergeBase && mergeBase.length === 40) ? mergeBase : upstream;
+    } catch {
+      baseRef = upstream;
+    }
+
+    const raw = git(["diff", "--name-only", `${baseRef}...HEAD`]);
     return raw ? raw.split("\n").filter(Boolean) : [];
   } catch {
     return [];

@@ -22,6 +22,7 @@ import type {
   FilteredFile,
   FilteredHunk,
   FilteredLine,
+  VulnerabilityVector,
 } from "../core/types";
 import {
   isCommentLine,
@@ -165,6 +166,26 @@ const FUNCTION_CONTEXT_RES: RegExp[] = [
   /@(?:Get|Post|Put|Delete|Patch|RequestMapping)\s*[(]\s*['\"]([^'\"]+)['\"]/i,
 ];
 
+/**
+ * Regex to detect @vibeguard-ignore directives in code comments.
+ *
+ * Supports all common comment styles:
+ *   // @vibeguard-ignore sql_injection
+ *   # @vibeguard-ignore sql_injection,xss
+ *   /* @vibeguard-ignore rce *\/
+ *
+ * Capture group 1: comma-separated vector name(s).
+ */
+const VIBEGUARD_IGNORE_RE = /@vibeguard-ignore\s+([a-z_]+(?:\s*,\s*[a-z_]+)*)/i;
+
+/** Valid vulnerability vector names for validation. */
+const VALID_VECTORS = new Set<string>([
+  "sql_injection", "privilege_escalation", "auth_bypass", "rce",
+  "input_fuzzing", "xss", "path_traversal", "ssrf", "idor",
+  "race_condition", "deserialization", "information_disclosure",
+  "misconfiguration", "other",
+]);
+
 // â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
@@ -200,12 +221,19 @@ export function filterDiff(diff: DiffResult): FilteredDiff {
     totalDeletions += filtered.deletions;
   }
 
+  // Aggregate total ignored vectors across all files.
+  const totalIgnoredVectors = filteredFiles.reduce(
+    (sum, f) => sum + f.ignored_vectors.length,
+    0
+  );
+
   return {
     files: filteredFiles,
     totalAdditions,
     totalDeletions,
     discarded,
     estimatedTokens: estimateTokens(filteredFiles),
+    totalIgnoredVectors,
   };
 }
 
@@ -303,9 +331,10 @@ function filterFile(file: DiffFile): FilteredFile {
   const filteredHunks: FilteredHunk[] = [];
   let additions = 0;
   let deletions = 0;
+  const ignoredVectorsSet = new Set<VulnerabilityVector>();
 
   for (const hunk of file.hunks) {
-    const filtered = filterHunk(hunk);
+    const filtered = filterHunk(hunk, ignoredVectorsSet);
     if (filtered.lines.length === 0) continue;
 
     filteredHunks.push(filtered);
@@ -319,6 +348,7 @@ function filterFile(file: DiffFile): FilteredFile {
     additions,
     deletions,
     hunks: filteredHunks,
+    ignored_vectors: [...ignoredVectorsSet],
   };
 }
 
@@ -336,7 +366,7 @@ function countByType(lines: FilteredLine[], type: string): number {
  * Filter a single DiffHunk: strip comment lines, doc blocks, whitespace noise,
  * and extract surrounding function/endpoint context from the header.
  */
-function filterHunk(hunk: DiffHunk): FilteredHunk {
+function filterHunk(hunk: DiffHunk, ignoredVectors: Set<VulnerabilityVector>): FilteredHunk {
   const context = extractContext(hunk.header);
   const filteredLines: FilteredLine[] = [];
 
@@ -346,6 +376,21 @@ function filterHunk(hunk: DiffHunk): FilteredHunk {
 
   for (const line of hunk.lines) {
     const trimmed = line.content.trim();
+
+    // Fix #4: Scan for @vibeguard-ignore directives on added/modified lines.
+    // These tell VibeGuard to skip specific vulnerability vectors for this file.
+    if (line.type === "add" || line.type === "context") {
+      const ignoreMatch = trimmed.match(VIBEGUARD_IGNORE_RE);
+      if (ignoreMatch) {
+        const vectors = ignoreMatch[1]
+          .split(",")
+          .map((v) => v.trim() as VulnerabilityVector)
+          .filter((v) => VALID_VECTORS.has(v));
+        for (const v of vectors) {
+          ignoredVectors.add(v);
+        }
+      }
+    }
 
     // Track multi-line comment state
     if (inBlockComment) {
@@ -389,7 +434,7 @@ function filterHunk(hunk: DiffHunk): FilteredHunk {
       continue;
     }
 
-    // Skip pure comment lines
+    // Skip pure comment lines (but keep the @vibeguard-ignore info we already extracted).
     if (SINGLE_LINE_COMMENT_RE.test(trimmed)) {
       continue;
     }
@@ -410,11 +455,16 @@ function filterHunk(hunk: DiffHunk): FilteredHunk {
       // Strip inline block comments first.
       content = content.replace(INLINE_BLOCK_COMMENT_RE, "");
 
-      // Strip inline single-line comments (respecting string literals).
+      // Strip inline single-line comments (respecting string literals),
+      // but preserve @vibeguard-ignore semantics by stripping the ignore
+      // tag from the content we send to the LLM.
       content = stripInlineComment(content);
+      // Remove any residual @vibeguard-ignore tag that the comment stripper
+      // might have left behind (e.g. if it was inside a block comment).
+      content = content.replace(/@vibeguard-ignore\s+[a-z_,\s]+/gi, "").trim();
 
       // If after stripping the line is empty, skip it.
-      if (WHITESPACE_ONLY_RE.test(content.trim())) {
+      if (WHITESPACE_ONLY_RE.test(content)) {
         continue;
       }
     }

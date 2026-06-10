@@ -83,6 +83,42 @@ export interface VibeGuardConfig {
 
   /** Directory for generated regression test files. Default: ".vibeguard/tests". */
   export_tests_dir?: string;
+
+  // ── Fix #1: Server Lifetime Management ──────────────────────────────
+
+  /** Shell command to start the local dev server (e.g. "docker-compose up -d local-api"). */
+  server_start_command?: string;
+
+  /** Shell command to stop the local dev server (e.g. "docker-compose down"). */
+  server_stop_command?: string;
+
+  // ── Fix #2: Dynamic Authentication & Token Seeding ──────────────────
+
+  /** Configuration for automatic token negotiation before adversarial tests run. */
+  auth_seeding?: AuthSeedingConfig;
+
+  // ── Fix #3: Concurrency Throttling ──────────────────────────────────
+
+  /** Maximum concurrent HTTP requests during adversarial testing. Default: 3. */
+  max_concurrent_requests?: number;
+}
+
+/** Configuration for dynamic auth token negotiation. */
+export interface AuthSeedingConfig {
+  /** Auth type to use when injecting the token into requests. */
+  auth_type: "bearer" | "header" | "cookie" | "query";
+
+  /** Shell command that produces a short-lived sandbox token on stdout. */
+  token_generation_command: string;
+
+  /** Custom header name (required when auth_type is "header"). */
+  header_name?: string;
+
+  /** Custom cookie name (required when auth_type is "cookie"). */
+  cookie_name?: string;
+
+  /** Custom query parameter name (required when auth_type is "query"). */
+  query_param_name?: string;
 }
 
 /** Shape of the raw JSON on disk before validation. */
@@ -229,6 +265,8 @@ export interface FilteredFile {
   additions: number;
   deletions: number;
   hunks: FilteredHunk[];
+  /** Vulnerability vectors explicitly ignored via @vibeguard-ignore directives in this file. */
+  ignored_vectors: VulnerabilityVector[];
 }
 
 /** The output of the noise filter — a token-optimized diff footprint. */
@@ -240,6 +278,8 @@ export interface FilteredDiff {
   discarded: Array<{ path: string; reason: string }>;
   /** Estimated token count of the filtered payload. */
   estimatedTokens: number;
+  /** Aggregated count of all ignored-vector directives found across files. */
+  totalIgnoredVectors: number;
 }
 
 // ─── Phase 3: Target Mapper ────────────────────────────────────────────────────
