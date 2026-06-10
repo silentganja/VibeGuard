@@ -53,6 +53,24 @@ const PLATFORM_TARGETS = [
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
+// Phase 15: Cleanup development artifacts before production compilation.
+function cleanDevArtifacts() {
+  const dirs = [
+    path.join(ROOT, '.vibeguard', 'cache'),
+    path.join(ROOT, '.vibeguard', 'logs'),
+  ];
+
+  for (const dir of dirs) {
+    try {
+      if (fs.existsSync(dir)) {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    } catch {
+      // Directory may not exist or be locked — skip.
+    }
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const doNative = args.includes("--native");
@@ -64,10 +82,14 @@ async function main() {
   console.log("");
   console.log(`  ${BUILD_TAG}`);
   console.log("  Production Build Pipeline");
+  // Phase 15: Clean development artifacts before production build.
+  console.log("  [0/5] Cleaning dev artifacts (.vibeguard/cache/, .vibeguard/logs/)...");
+  cleanDevArtifacts();
+  console.log("  ✓  Dev artifacts cleaned");
   console.log("");
 
   // ── Step 1: TypeScript type-check ──────────────────────────────────
-  console.log("  [1/4] Type-checking...");
+  console.log("  [1/5] Type-checking...");
   try {
     execSync("npx tsc --noEmit", { cwd: ROOT, stdio: "pipe" });
     console.log("  ✓  Type-check passed");
@@ -77,22 +99,22 @@ async function main() {
   }
 
   // ── Step 2: Bundle with esbuild ────────────────────────────────────
-  console.log("  [2/4] Bundling with esbuild...");
+  console.log("  [2/5] Bundling with esbuild...");
   await bundle();
   console.log("  ✓  Bundle complete");
 
   // ── Step 3: Generate wrapper scripts ───────────────────────────────
-  console.log("  [3/4] Generating platform wrappers...");
+  console.log("  [3/5] Generating platform wrappers...");
   generateWrappers();
   console.log("  ✓  Wrappers generated");
 
   // ── Step 4: Native SEA binaries (optional) ────────────────────────
   if (doNative) {
-    console.log("  [4/4] Compiling native binaries via Node.js SEA...");
+    console.log("  [4/5] Compiling native binaries via Node.js SEA...");
     await compileNativeBinaries(targets);
     console.log("  ✓  Native binaries compiled");
   } else {
-    console.log("  [4/4] Skipping native binaries (use --native to enable)");
+    console.log("  [4/5] Skipping native binaries (use --native to enable)");
   }
 
   // ── Summary ───────────────────────────────────────────────────────

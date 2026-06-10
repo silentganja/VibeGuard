@@ -32,11 +32,12 @@ import { renderFailureReport, renderSuccessReport, renderPhaseHeader, renderExpo
 import { isHeadless, getOutputMode } from "../compliance/ci";
 import { dispatchAlert, buildReport } from "../infrastructure/webhooks";
 import type { RunArgs, TargetTargets, TestReport, PatchResult } from "../core/types";
+import { write as logWrite, writeSync as logWriteSync, initLogger } from "../utils/logger";
 
 // â”€â”€â”€ Version & Build Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const VERSION = "VibeGuard Engine v1.0.0 (2026)";
-const BUILD_TAG = "Phase 14 Â· Notification Engine";
+const BUILD_TAG = "Phase 15 Â· Notification Engine";
 
 // â”€â”€â”€ Help Text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -535,7 +536,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
 
 
 
-    // Phase 14: Automated Regression Test Export
+    // Phase 15: Automated Regression Test Export
     // When vulnerabilities are confirmed locally, generate a permanent
     // regression test and auto-stage it so the fix commit includes the test.
     let exportedTests: string[] = [];
@@ -556,7 +557,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
       }
     }
 
-    // Phase 14: CI/CD Webhook Notification
+    // Phase 15: CI/CD Webhook Notification
     // Fire vulnerability alerts to Slack/Discord/Teams before DB restore.
     // Only in headless CI mode; best-effort — failures never block the push.
     if (isHeadless() && !testReport.overallPass && testReport.vulnerabilitiesFound > 0) {
@@ -671,6 +672,9 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
 // â”€â”€â”€ Main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function main(): Promise<void> {
+  // Phase 15: Top-level crash boundary — captures unhandled exceptions
+  // to the structured debug log before displaying a minimal terminal banner.
+  try {
   const { command, flags } = parseArgs(process.argv);
 
   // â”€â”€ Global flags (before command dispatch) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -717,9 +721,29 @@ async function main(): Promise<void> {
       ui.muted("Run `vibeguard --help` to see usage.");
       process.exit(1);
   }
+  } catch (err: unknown) {
+    // Phase 15: Unhandled exception — log the full stack trace,
+    // show a minimal dark-mode banner, and exit with code 1.
+    const stack = (err as Error).stack ?? (err as Error).message ?? String(err);
+    const projectRoot = findProjectRoot() ?? process.cwd();
+
+    // Phase 15: Initialize the structured debug logger.
+    initLogger(projectRoot).catch(() => { /* non-blocking */ });
+
+    // Write the crash diagnostics to the structured log file.
+    logWriteSync("error", "runtime_crash", stack, projectRoot);
+
+    // Minimal dark-mode banner — professional, non-intrusive.
+    ui.space();
+    ui.rule();
+    ui.fail("VibeGuard Critical Exception");
+    ui.muted("  An unhandled engine crash occurred.");
+    ui.muted("  Detailed diagnostics have been securely written to:");
+    ui.muted("  .vibeguard/logs/engine_debug.log");
+    ui.rule();
+
+    process.exit(1);
+  }
 }
 
-main().catch((err) => {
-  ui.fail(`Unexpected error: ${err.message}`);
-  process.exit(1);
-});
+main();

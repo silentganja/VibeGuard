@@ -19,6 +19,7 @@ import { findProjectRoot } from "./config";
 import { isHeadless, detectCIPlatform } from "../compliance/ci";
 import * as ui from "../cli/ui";
 import { ensureCacheGitignored } from "../utils/cache";
+import { ensureLogsGitignored } from "../utils/logger";
 
 // â”€â”€â”€ Hook Script (Bash) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -221,6 +222,7 @@ export function installHook(): void {
 
   // Phase 12: Ensure LLM response cache directory is never committed.
   ensureCacheGitignored(projectRoot);
+  ensureLogsGitignored(projectRoot);
 
   // â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ui.space();
