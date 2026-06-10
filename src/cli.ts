@@ -17,8 +17,13 @@
 import * as ui from "./ui";
 import { initConfig, readConfig, printConfig } from "./config";
 import { installHook, uninstallHook } from "./hooks";
-import { extractDiff, getChangedFiles } from "./git";
-import type { RunArgs } from "./types";
+import { extractDiff } from "./git";
+import { filterDiff } from "./parser";
+import { analyzeDiff } from "./llm";
+import { checkServer, formatCheckResult } from "./checker";
+import { mapTargetsFromAnalysis, formatMappingSummary } from "./mapper";
+import { capture, restore } from "./dbGuard";
+import type { RunArgs, TargetTargets } from "./types";
 
 // ─── Help Text ───────────────────────────────────────────────────────────────
 
@@ -40,7 +45,7 @@ ${"\x1b[90m"}Examples:${"\x1b[0m"}
   vibeguard install
   vibeguard config
 
-${"\x1b[90m"}Phase 1 · v0.1.0${"\x1b[0m"}
+${"\x1b[90m"}Phase 4 · v0.4.0${"\x1b[0m"}
 `;
 
 // ─── Argument Parser (zero-dependency) ───────────────────────────────────────
@@ -122,19 +127,24 @@ function handleConfig(): void {
 /**
  * Internal command invoked by the pre-push hook.
  *
- * Steps:
- *   1. Parse --local, --remote, --sha flags from the hook.
+ * Full pipeline:
+ *   1. Parse --local, --remote flags from the hook.
  *   2. Read the project config.
- *   3. Run the git diff extraction.
- *   4. Print a structured summary of the changes.
- *   5. Exit 0 (pass) or 1 (fail).
- *
- * Phase 2 will insert the LLM analysis call between steps 3 and 4.
+ *   3. Extract the raw git diff (Phase 1).
+ *   4. Apply noise filter & token optimization (Phase 2 — parser).
+ *   5. Verify local dev server is reachable (Phase 3 — checker).
+ *   6. Send filtered payload to the configured LLM (Phase 2 — llm).
+ *   7. Resolve endpoints to executable test URLs (Phase 3 — mapper).
+ *   8. Capture database state snapshot (Phase 4 — dbGuard.capture).
+ *   9. [Future: Phase 5 — Generate adversarial payloads].
+ *  10. [Future: Phase 6 — Fire payloads & analyze responses].
+ *  11. Restore database state (Phase 4 — dbGuard.restore).
+ *  12. Build pass/fail verdict and report findings.
+ *  13. Exit 0 (pass) or 1 (block).
  */
-function handleRun(flags: Record<string, string>): void {
+async function handleRun(flags: Record<string, string>): Promise<void> {
   const local = flags.local ?? flags.l ?? "";
   const remote = flags.remote ?? flags.r ?? "";
-  const sha = flags.sha ?? flags.s ?? "";
 
   if (!local) {
     ui.fail("--local <branch> is required");
@@ -142,70 +152,309 @@ function handleRun(flags: Record<string, string>): void {
   }
 
   try {
-    // 1. Read config (validates it exists and is well-formed).
-    const config = readConfig();
+    // ═══ Phase 1: Extract Raw Diff ═══════════════════════════════════════
+    ui.action("Extracting diff: " + local + " -> " + (remote || "upstream"));
 
-    // 2. Extract the structured diff.
-    ui.action(`Extracting diff: ${local} → ${remote || "upstream"}`);
+    const rawDiff = extractDiff(local);
 
-    const diff = extractDiff(local);
-
-    // 3. Print structured summary.
-    ui.space();
-    ui.rule();
-    ui.header("Diff Summary");
-
-    if (diff.files.length === 0) {
+    if (rawDiff.files.length === 0) {
+      ui.space();
+      ui.rule();
+      ui.header("Diff Summary");
       ui.muted("  (no changes detected — nothing to push)");
       ui.rule();
-      ui.ok("VibeGuard analysis complete · no changes");
+      ui.ok("VibeGuard analysis complete - no changes");
       process.exit(0);
     }
 
-    ui.kv("Files changed", String(diff.files.length));
-    ui.kv("Lines added", `+${diff.totalAdditions}`);
-    ui.kv("Lines deleted", `-${diff.totalDeletions}`);
+    // ═══ Phase 2a: Noise Filter & Token Optimization ═════════════════════
+    ui.action("Filtering diff noise...");
+
+    const filtered = filterDiff(rawDiff);
+
+    // Show what's being analyzed vs. discarded.
+    ui.space();
     ui.rule();
+    ui.header("Diff Summary");
+    ui.kv("Files changed", String(rawDiff.files.length));
+    ui.kv("Lines added", "+" + String(rawDiff.totalAdditions));
+    ui.kv("Lines deleted", "-" + String(rawDiff.totalDeletions));
+    ui.muted("");
+    ui.kv("Files for LLM analysis", String(filtered.files.length));
+    ui.kv("Files filtered out", String(filtered.discarded.length));
+    ui.kv("Estimated tokens", "~" + String(filtered.estimatedTokens));
 
-    // Per-file breakdown.
-    for (const file of diff.files) {
-      const statusIcon = file.status === "added" ? "A"
-        : file.status === "deleted" ? "D"
-        : file.status === "renamed" ? "R"
-        : "M";
+    // Show discarded files if any.
+    if (filtered.discarded.length > 0) {
+      ui.muted("");
+      ui.muted("Filtered out (non-functional noise):");
+      for (const d of filtered.discarded) {
+        ui.muted("  - " + d.path + " — " + d.reason);
+      }
+    }
 
-      const displayPath = file.status === "renamed"
-        ? `${file.oldPath} → ${file.path}`
-        : file.path;
-
-      const stats = `+${file.additions}  -${file.deletions}`;
-      ui.muted(`  ${statusIcon}  ${displayPath}  ${stats}`);
+    // Show files being analyzed.
+    if (filtered.files.length > 0) {
+      ui.muted("");
+      ui.muted("Files under LLM analysis:");
+      for (const file of filtered.files) {
+        const statusIcon = file.status === "added" ? "A"
+          : file.status === "deleted" ? "D"
+          : file.status === "renamed" ? "R"
+          : "M";
+        const hunkCount = file.hunks.length;
+        const hunkLabel = hunkCount === 1 ? "1 hunk" : String(hunkCount) + " hunks";
+        ui.muted("  " + statusIcon + "  " + file.path + "  +" + String(file.additions) + " -" + String(file.deletions) + "  (" + hunkLabel + ")");
+      }
     }
 
     ui.rule();
 
-    // 4. Memory footprint summary (what would be sent to the LLM).
-    const totalLines = diff.files.reduce(
-      (sum, f) => sum + f.hunks.reduce((s, h) => s + h.lines.length, 0),
-      0
-    );
-    ui.muted(
-      `Memory footprint: ${diff.files.length} files, ` +
-      `${totalLines} diff lines, ` +
-      `${diff.totalAdditions} additions, ` +
-      `${diff.totalDeletions} deletions`
-    );
+    // ═══ Read Config ═════════════════════════════════════════════════════
+    const config = readConfig();
 
-    // 5. Phase 2 placeholder.
+    if (filtered.files.length === 0) {
+      // All changes were noise — no need to call the LLM or check server.
+      ui.muted("All changes are non-functional (docs, styles, comments, whitespace).");
+      ui.muted("No LLM analysis needed.");
+      ui.ok("VibeGuard analysis complete - push allowed (no functional changes)");
+      process.exit(0);
+    }
+
+    // ═══ Phase 3a: Connectivity Pre-flight Check ═════════════════════════
     ui.space();
-    ui.muted("─ Phase 2 (LLM analysis) not yet integrated ─");
+    ui.header("Connectivity Check");
+    ui.action("Probing " + config.target_local_url + "...");
 
-    // 6. In Phase 1, we always pass — the diff extraction is the deliverable.
-    //    Phase 2 will conditionally fail based on LLM verdict.
-    ui.ok("VibeGuard analysis complete · push allowed");
-    process.exit(0);
+    const serverCheck = await checkServer(config);
+
+    if (!serverCheck.reachable) {
+      // Fail fast — no point calling the LLM if the server is down.
+      // Spec requires: [VibeGuard Error] Local development server at <url> is unreachable.
+      ui.space();
+      ui.rule();
+      ui.fail("Local development server at " + config.target_local_url + " is unreachable. Please start your local environment before pushing.");
+      ui.muted("");
+      ui.muted("  " + formatCheckResult(serverCheck, config.target_local_url));
+      ui.muted("");
+      ui.muted("Troubleshooting:");
+      ui.muted("  - Is your dev server running?");
+      ui.muted("  - Is target_local_url correct in .vibeguard.json?");
+      ui.muted("  - Check: " + config.target_local_url);
+      ui.rule();
+      ui.fail("Push blocked — cannot verify changes without a running server");
+      ui.muted("");
+      ui.muted("To bypass (NOT RECOMMENDED):");
+      ui.muted("  git push --no-verify");
+      process.exit(1);
+    }
+
+    ui.ok(formatCheckResult(serverCheck, config.target_local_url));
+
+    // ═══ Phase 2b: LLM Analysis ═════════════════════════════════════════
+    ui.space();
+    ui.header("LLM Analysis");
+
+    const verdict = await analyzeDiff(config, filtered);
+
+    // ═══ Phase 2c: Verdict & Reporting ═══════════════════════════════════
+    ui.space();
+    ui.rule();
+    ui.header("Analysis Results");
+
+    // Print the explanation.
+    for (const line of verdict.explanation.split("\n")) {
+      if (line.trim()) {
+        ui.muted(line);
+      } else {
+        ui.space();
+      }
+    }
+
+    // Print per-endpoint details.
+    if (verdict.result.modified_endpoints.length > 0) {
+      ui.space();
+      for (const ep of verdict.result.modified_endpoints) {
+        const methodColor = ep.http_method === "POST" || ep.http_method === "PUT" || ep.http_method === "DELETE"
+          ? "\x1b[33m"  // yellow for mutating methods
+          : "\x1b[36m"; // cyan for safe methods
+        const R = "\x1b[0m";
+
+        ui.muted("  > " + ep.file_path);
+        ui.muted("    " + methodColor + ep.http_method + R + " " + ep.estimated_route);
+        ui.muted("    Intent: " + ep.detected_intent);
+
+        if (ep.input_parameters.length > 0) {
+          ui.muted("    Inputs: " + ep.input_parameters.join(", "));
+        }
+
+        if (ep.vulnerability_vectors.length > 0) {
+          ui.muted("    Vectors: \x1b[31m" + ep.vulnerability_vectors.join(", ") + "\x1b[0m");
+        }
+      }
+    }
+
+    ui.rule();
+
+    // ═══ Phase 3b: Target Mapping ═══════════════════════════════════════
+    let targets: TargetTargets = { executable_tests: [] };
+
+    if (verdict.result.modified_endpoints.length > 0) {
+      ui.space();
+      ui.header("Target Mapping");
+      ui.action("Resolving endpoints to executable URLs...");
+
+      targets = mapTargetsFromAnalysis(config, verdict.result);
+
+      ui.space();
+      const mappingSummary = formatMappingSummary(targets);
+      for (const line of mappingSummary.split("\n")) {
+        if (line.trim()) {
+          ui.muted(line);
+        } else {
+          ui.space();
+        }
+      }
+
+      // Show resolved test URLs prominently.
+      ui.space();
+      ui.header("Executable Test Targets");
+      for (const test of targets.executable_tests) {
+        const stratColor = test.mapping_strategy === "framework" ? "\x1b[36m"
+          : test.mapping_strategy === "traditional" ? "\x1b[33m"
+          : "\x1b[31m";
+        const R = "\x1b[0m";
+
+        ui.muted("  " + stratColor + test.http_method + R + " " + test.resolved_url);
+        ui.muted("    File: " + test.associated_file + "  [" + test.mapping_strategy + "]");
+
+        if (test.vulnerability_vectors.length > 0 && test.input_parameters.length > 0) {
+          ui.muted("    Vectors: " + test.vulnerability_vectors.join(", ") + "  |  Inputs: " + test.input_parameters.join(", "));
+        } else if (test.vulnerability_vectors.length > 0) {
+          ui.muted("    Vectors: " + test.vulnerability_vectors.join(", "));
+        } else if (test.input_parameters.length > 0) {
+          ui.muted("    Inputs: " + test.input_parameters.join(", "));
+        }
+      }
+      ui.rule();
+    }
+
+    // ═══ Phase 4a: DB State Capture ═════════════════════════════════════
+    ui.space();
+    ui.header("Database State Guard");
+    ui.action("Capturing database state...");
+
+    const snapshot = capture(config, filtered);
+
+    if (snapshot.strategy !== "none") {
+      ui.muted("  " + snapshot.summary);
+      if (snapshot.tables.length > 0) {
+        ui.muted("  Tables discovered:");
+        for (const t of snapshot.tables) {
+          ui.muted("    - " + t.tableName + " (" + t.operation + ")  ← " + t.sourceFile);
+        }
+      }
+      if (!snapshot.success) {
+        ui.warn("  Warning: Snapshot had errors — " + (snapshot.error ?? "unknown"));
+      }
+      ui.ok("Database state captured (" + snapshot.strategy + ")");
+    } else {
+      ui.muted("  " + snapshot.summary);
+    }
+
+    // ═══ Phase 5 & 6: Payload Triggering (Future) ═══════════════════════
+    // ────────────────────────────────────────────────────────────────────
+    // TODO: Phase 5 — Generate adversarial payloads from vulnerability vectors.
+    // TODO: Phase 6 — Fire payloads against resolved URLs and analyze responses.
+    //
+    // The capture/restore lifecycle wraps this section so that any
+    // database side effects from test payloads are fully reversible.
+    // ────────────────────────────────────────────────────────────────────
+    ui.space();
+    ui.muted("─ Phase 5 & 6 (Payload Triggering) not yet integrated ─");
+    ui.muted("  DB guard lifecycle is active — capture/restore will wrap future payloads.");
+
+    // ═══ Phase 4b: DB State Restore ═════════════════════════════════════
+    ui.space();
+    ui.action("Restoring database state...");
+
+    const restoreResult = restore(config);
+
+    if (restoreResult.strategy !== "none") {
+      if (restoreResult.success) {
+        ui.ok(restoreResult.summary);
+      } else {
+        ui.warn("  " + restoreResult.summary);
+        if (restoreResult.error) {
+          ui.muted("  Error: " + restoreResult.error);
+        }
+        ui.warn("  Manual DB cleanup may be required.");
+      }
+    } else {
+      ui.muted("  " + restoreResult.summary);
+    }
+
+    ui.rule();
+
+    // Final pass/fail decision.
+    if (verdict.pass) {
+      ui.ok("VibeGuard analysis passed - push allowed");
+      process.exit(0);
+    } else {
+      ui.space();
+      ui.fail("VibeGuard analysis FAILED — push blocked");
+      ui.muted("");
+      ui.muted("The diff contains high-severity vulnerability vectors.");
+      ui.muted("Review the findings above and fix the issues before pushing.");
+      ui.muted("");
+      ui.muted("To bypass (NOT RECOMMENDED):");
+      ui.muted("  git push --no-verify");
+      process.exit(1);
+    }
   } catch (err: unknown) {
-    ui.fail((err as Error).message);
+    // ═══ Emergency Restore on Pipeline Failure ══════════════════════════
+    // If anything in the pipeline throws, attempt DB restore before exiting.
+    // This ensures we never leave the database in a dirty state.
+    try {
+      const config = readConfig();
+      const emergencyRestore = restore(config);
+      if (emergencyRestore.strategy !== "none" && emergencyRestore.success) {
+        ui.muted("  (Emergency DB restore completed)");
+      }
+    } catch {
+      // Restore itself failed — nothing more we can do.
+    }
+
+    // Fail closed: any error in the analysis pipeline blocks the push.
+    const message = (err as Error).message ?? String(err);
+    const isTimeout = message.includes("TIMEOUT") || message.includes("timed out");
+
+    ui.space();
+    ui.rule();
+
+    if (isTimeout) {
+      // Dark-mode timeout warning per spec.
+      ui.fail("LLM Request Timed Out");
+      ui.muted("");
+      ui.muted("  " + message.replace(/\n/g, "\n  "));
+      ui.muted("");
+      ui.muted("The configured LLM did not respond within the 6-second deadline.");
+      ui.muted("This prevents VibeGuard from blocking your push indefinitely.");
+      ui.muted("");
+      ui.muted("Troubleshooting:");
+      ui.muted("  - Verify your LLM is running at the endpoint in .vibeguard.json");
+      ui.muted("  - Check llm_model in .vibeguard.json matches an available model.");
+      ui.muted("  - For local models (Ollama/LM Studio), ensure the server is started.");
+    } else {
+      ui.fail("VibeGuard analysis encountered an error");
+      ui.muted("  " + message);
+    }
+
+    ui.rule();
+    ui.fail("Push blocked — analysis could not complete");
+    ui.muted("");
+    ui.muted("To bypass (NOT RECOMMENDED):");
+    ui.muted("  git push --no-verify");
     process.exit(1);
   }
 }
@@ -233,7 +482,7 @@ async function main(): Promise<void> {
       break;
 
     case "run":
-      handleRun(flags);
+      await handleRun(flags);
       break;
 
     case "":

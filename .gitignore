@@ -5,3 +5,5 @@ dist/
 *.d.ts.map
 .env
 .vibeguard.json
+.codegraph/
+.vibeguard/tmp/

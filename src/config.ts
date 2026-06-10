@@ -13,7 +13,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
-import type { VibeGuardConfig, RawConfig } from "./types";
+import type { VibeGuardConfig, RawConfig, DbConnectionConfig } from "./types";
 import * as ui from "./ui";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -29,6 +29,14 @@ const DEFAULT_CONFIG: VibeGuardConfig = {
   llm_model: "llama3:8b",
   target_local_url: "http://localhost:8000",
   exclude_paths: ["node_modules/**", "vendor/**", ".git/**", "dist/**", "build/**"],
+  // Phase 4 defaults
+  db_type: "none",
+  db_host: "127.0.0.1",
+  db_port: 3306,
+  db_user: "root",
+  db_pass: "",
+  db_name: "",
+  db_sqlite_path: "",
 };
 
 // ─── Project Root Discovery ──────────────────────────────────────────────────
@@ -114,6 +122,39 @@ export function validateConfig(raw: Partial<VibeGuardConfig>): string[] {
       for (let i = 0; i < raw.exclude_paths.length; i++) {
         if (typeof raw.exclude_paths[i] !== "string") {
           errors.push(`exclude_paths[${i}] must be a string`);
+        }
+      }
+    }
+  }
+
+  // ── Phase 4: DB config validation (all fields are optional) ──────────
+  const VALID_DB_TYPES = new Set(["mysql", "postgresql", "sqlite", "none"]);
+
+  if (raw.db_type !== undefined) {
+    if (typeof raw.db_type !== "string" || !VALID_DB_TYPES.has(raw.db_type)) {
+      errors.push('db_type must be one of: "mysql" | "postgresql" | "sqlite" | "none"');
+    } else if (raw.db_type !== "none") {
+      // When a DB type is active, validate related fields.
+      if (raw.db_type === "sqlite") {
+        if (raw.db_sqlite_path !== undefined && typeof raw.db_sqlite_path !== "string") {
+          errors.push("db_sqlite_path must be a string (path to .db file)");
+        }
+      } else {
+        // MySQL or PostgreSQL: host, port, user, name are needed.
+        if (raw.db_host !== undefined && typeof raw.db_host !== "string") {
+          errors.push("db_host must be a string");
+        }
+        if (raw.db_port !== undefined && typeof raw.db_port !== "number") {
+          errors.push("db_port must be a number");
+        }
+        if (raw.db_user !== undefined && typeof raw.db_user !== "string") {
+          errors.push("db_user must be a string");
+        }
+        if (raw.db_pass !== undefined && typeof raw.db_pass !== "string") {
+          errors.push("db_pass must be a string (or $ENV_VAR)");
+        }
+        if (raw.db_name !== undefined && typeof raw.db_name !== "string") {
+          errors.push("db_name must be a string");
         }
       }
     }
@@ -247,6 +288,32 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
   const targetUrl = await ask("Target Local Dev Server URL", DEFAULT_CONFIG.target_local_url);
   const excludeRaw = await ask("Exclude paths (comma-separated)", DEFAULT_CONFIG.exclude_paths.join(", "));
 
+  // ── Phase 4: Database Configuration ──────────────────────────────────
+  ui.space();
+  ui.muted("─ Database State Guard (Phase 4) ─");
+  ui.muted("  These fields are optional. Set db_type to \"none\" to skip DB guarding.");
+  ui.space();
+
+  const dbType = await ask("DB Type (mysql | postgresql | sqlite | none)", DEFAULT_CONFIG.db_type ?? "none");
+  let dbHost = "";
+  let dbPort = "";
+  let dbUser = "";
+  let dbPass = "";
+  let dbName = "";
+  let dbSqlitePath = "";
+
+  if (dbType !== "none") {
+    if (dbType === "sqlite") {
+      dbSqlitePath = await ask("SQLite DB file path", DEFAULT_CONFIG.db_sqlite_path ?? "");
+    } else {
+      dbHost = await ask("DB Host", DEFAULT_CONFIG.db_host ?? "127.0.0.1");
+      dbPort = await ask("DB Port", String(DEFAULT_CONFIG.db_port ?? (dbType === "postgresql" ? 5432 : 3306)));
+      dbUser = await ask("DB User", DEFAULT_CONFIG.db_user ?? "root");
+      dbPass = await ask("DB Password (or $ENV_VAR)", DEFAULT_CONFIG.db_pass ?? "");
+      dbName = await ask("DB Name", DEFAULT_CONFIG.db_name ?? "");
+    }
+  }
+
   rl.close();
 
   const config: VibeGuardConfig = {
@@ -256,6 +323,13 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
     llm_model: model,
     target_local_url: targetUrl,
     exclude_paths: excludeRaw.split(",").map((s) => s.trim()).filter(Boolean),
+    db_type: dbType as VibeGuardConfig["db_type"],
+    db_host: dbHost || undefined,
+    db_port: dbPort ? parseInt(dbPort, 10) : undefined,
+    db_user: dbUser || undefined,
+    db_pass: dbPass || undefined,
+    db_name: dbName || undefined,
+    db_sqlite_path: dbSqlitePath || undefined,
   };
 
   // Validate before writing
@@ -291,4 +365,49 @@ export function printConfig(): void {
   ui.kv("Model", config.llm_model);
   ui.kv("Target URL", config.target_local_url);
   ui.kv("Excluded", config.exclude_paths.join(", ") || "(none)");
+
+  // ── Phase 4: Database ────────────────────────────────────────────────
+  const dbType = config.db_type ?? "none";
+  ui.space();
+  ui.muted("─ Database State Guard ─");
+  ui.kv("DB Type", dbType);
+  if (dbType !== "none") {
+    if (dbType === "sqlite") {
+      ui.kv("DB SQLite Path", config.db_sqlite_path || "(not set)");
+    } else {
+      ui.kv("DB Host", config.db_host || "(not set)");
+      ui.kv("DB Port", String(config.db_port ?? ""));
+      ui.kv("DB User", config.db_user || "(not set)");
+      ui.kv("DB Pass", config.db_pass?.startsWith("$")
+        ? `${config.db_pass} (env var)`
+        : config.db_pass ? "(literal)" : "(not set)");
+      ui.kv("DB Name", config.db_name || "(not set)");
+    }
+  }
+}
+
+// ─── Phase 4 Helper ─────────────────────────────────────────────────────────
+
+/**
+ * Extract a normalized DbConnectionConfig from the full config.
+ * Resolves $ENV_VAR references in db_pass and fills defaults.
+ */
+export function getDbConnectionConfig(config: VibeGuardConfig): DbConnectionConfig {
+  const dbType = config.db_type ?? "none";
+
+  const resolvedPass = config.db_pass
+    ? (config.db_pass.startsWith("$")
+      ? (process.env[config.db_pass.slice(1)] ?? "")
+      : config.db_pass)
+    : "";
+
+  return {
+    type: dbType as DbConnectionConfig["type"],
+    host: config.db_host ?? "127.0.0.1",
+    port: config.db_port ?? (dbType === "postgresql" ? 5432 : 3306),
+    user: config.db_user ?? "root",
+    pass: resolvedPass,
+    name: config.db_name ?? "",
+    sqlitePath: config.db_sqlite_path ?? "",
+  };
 }
