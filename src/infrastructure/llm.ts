@@ -27,8 +27,9 @@ import type {
   AnalysisVerdict,
   VulnerabilityVector,
 } from "../core/types";
-import { resolveApiKey } from "../core/config";
+import { resolveApiKey, findProjectRoot } from "../core/config";
 import * as ui from "../cli/ui";
+import { hashDiff, readCache, writeCache } from "../utils/cache";
 
 // â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -58,6 +59,44 @@ const MAX_PAYLOAD_CHARS = 28_000;
 
 /** HTTP request timeout in milliseconds (6 seconds per spec). */
 const REQUEST_TIMEOUT_MS = 6_000;
+
+// Phase 12: Circuit Breaker & Retry State
+
+/** Consecutive LLM API failure counter shared across all callers. */
+let consecutiveFailures = 0;
+
+/** Backoff delays for retry attempts (ms): attempt 1 = 1000, 2 = 2500, 3 = 5000. */
+const BACKOFF_DELAYS = [1000, 2500, 5000];
+
+/** HTTP status codes that trigger a retry (rate-limit + server errors). */
+const RETRYABLE_STATUS_CODES = new Set([429, 502, 503, 504]);
+
+/**
+ * Promise-based sleep for backoff delays.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Reset the circuit breaker after a successful API call.
+ */
+function resetCircuitBreaker(): void {
+  consecutiveFailures = 0;
+}
+
+/**
+ * Increment the failure counter. Throws if the circuit breaker trips.
+ */
+function recordFailure(maxRetries: number): void {
+  consecutiveFailures++;
+  if (consecutiveFailures >= maxRetries) {
+    throw new Error(
+      "[LLM Error] API unreachable after " + String(maxRetries) +
+      " attempt(s). Circuit breaker tripped — push aborted to maintain security posture."
+    );
+  }
+}
 
 // â”€â”€â”€ System Prompt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -218,27 +257,122 @@ function buildDiffPayload(diff: FilteredDiff): string {
  * @param userMessage - The user message to send.
  * @param systemPrompt - Optional custom system prompt. Uses Sovereign System Architect default if omitted.
  */
+/**
+ * Call the user configured LLM API with circuit breaker, cache interception,
+ * and exponential backoff retry logic.
+ *
+ * Phase 12 hardening:
+ *   1. Circuit breaker — trips after llm_max_retries consecutive failures.
+ *   2. Cache interception — returns cached response for identical diffs.
+ *   3. Exponential backoff — retries on 429/5xx with 1s/2.5s/5s delays.
+ *
+ * @param config       - Validated VibeGuard configuration.
+ * @param userMessage  - The user message to send.
+ * @param systemPrompt - Optional custom system prompt.
+ * @param diffHash     - Optional SHA-256 hash of the sanitized diff for caching.
+ */
 export async function callLLM(
   config: VibeGuardConfig,
   userMessage: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  diffHash?: string
 ): Promise<string> {
+  const maxRetries = config.llm_max_retries ?? 3;
+  const cacheEnabled = config.llm_cache_enabled ?? true;
+
+  // 1. Circuit breaker guard.
+  if (consecutiveFailures >= maxRetries) {
+    throw new Error(
+      "[LLM Error] API unreachable after " + String(maxRetries) +
+      " attempt(s). Circuit breaker tripped — push aborted to maintain security posture."
+    );
+  }
+
+  // 2. Cache interception — skip the network if we have seen this diff before.
+  if (cacheEnabled && diffHash) {
+    const projectRoot = findProjectRoot() ?? process.cwd();
+    const cached = readCache(diffHash, projectRoot);
+    if (cached !== null) {
+      ui.muted("  [VibeGuard: Using Cached Intent]");
+      return cached;
+    }
+  }
+
+  // 3. Resolve API key and dispatch to provider with retry wrapper.
   const apiKey = resolveApiKey(config.llm_api_key);
   const prompt = systemPrompt ?? SYSTEM_PROMPT;
 
-  switch (config.llm_provider) {
-    case "custom":
-    case "openai":
-      return callOpenAICompatible(config.llm_api_endpoint, apiKey, config.llm_model, userMessage, prompt);
+  let lastError: unknown;
 
-    case "anthropic":
-      return callAnthropic(config.llm_api_endpoint, apiKey, config.llm_model, userMessage, prompt);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      let response: string;
+      switch (config.llm_provider) {
+        case "custom":
+        case "openai":
+          response = await callOpenAICompatible(config.llm_api_endpoint, apiKey, config.llm_model, userMessage, prompt);
+          break;
+        case "anthropic":
+          response = await callAnthropic(config.llm_api_endpoint, apiKey, config.llm_model, userMessage, prompt);
+          break;
+        default:
+          throw new Error("Unknown LLM provider: " + config.llm_provider);
+      }
 
-    default:
-      throw new Error("Unknown LLM provider: " + config.llm_provider);
+      // Success — reset circuit breaker and cache the result.
+      resetCircuitBreaker();
+
+      if (cacheEnabled && diffHash) {
+        const projectRoot = findProjectRoot() ?? process.cwd();
+        writeCache(diffHash, response, projectRoot);
+      }
+
+      return response;
+    } catch (err: unknown) {
+      lastError = err;
+      const msg = (err as Error).message ?? String(err);
+
+      // Do not retry on timeout — the server is up but slow.
+      if ((err as Error).name === "AbortError" || msg.includes("timed out")) {
+        recordFailure(maxRetries);
+        throw new Error(
+          "LLM request timed out after " + String(REQUEST_TIMEOUT_MS / 1000) + "s.\\n" +
+          "The configured LLM (" + config.llm_model + ") did not respond within the deadline.\\n" +
+          "Check that your LLM endpoint is running and reachable, or increase the timeout."
+        );
+      }
+
+      // Check if retryable (429/5xx).
+      const statusMatch = msg.match(/returned (\d{3})/);
+      const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : null;
+      const isRetryable = statusCode !== null && RETRYABLE_STATUS_CODES.has(statusCode);
+
+      if (isRetryable && attempt < maxRetries - 1) {
+        const delay = BACKOFF_DELAYS[attempt] ?? 5000;
+        ui.warn(
+          "  LLM API returned " + String(statusCode) +
+          " — retrying in " + String(delay / 1000) + "s (attempt " +
+          String(attempt + 2) + "/" + String(maxRetries) + ")..."
+        );
+        await sleep(delay);
+        continue;
+      }
+
+      // Non-retryable or exhausted retries — record failure.
+      recordFailure(maxRetries);
+
+      // If circuit breaker tripped inside recordFailure, it throws.
+      // Otherwise, throw the last error.
+      throw new Error(
+        "LLM analysis failed: " + ((err as Error).message ?? String(err)) + "\\n" +
+        "Push blocked — cannot verify changes without LLM analysis."
+      );
+    }
   }
-}
 
+  // Should never reach here — circuit breaker throws first.
+  throw lastError ?? new Error("LLM call failed for an unknown reason.");
+}
 /**
  * OpenAI-compatible chat completions API.
  * Used for both `openai` and `custom` providers.
@@ -676,7 +810,9 @@ export async function analyzeDiff(
 
   let rawResponse: string;
   try {
-    rawResponse = await callLLM(config, userMessage);
+  // Phase 12: Compute diff hash for cache lookup.
+  const diffHash = hashDiff(diffPayload);
+  rawResponse = await callLLM(config, userMessage, undefined, diffHash);
   } catch (err: unknown) {
     // Fail closed: any LLM error blocks the push.
     const isTimeout = (err as Error).message.includes("timed out");

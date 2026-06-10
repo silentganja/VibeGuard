@@ -53,6 +53,14 @@ export interface VibeGuardConfig {
 
   /** Absolute or relative path to the SQLite database file. */
   db_sqlite_path?: string;
+
+  // ── Phase 12: LLM Caching & Rate Limit Handling ────────────────────────
+
+  /** Maximum number of retry attempts for rate-limited (429) or server-error (5xx) responses. Default: 3. */
+  llm_max_retries?: number;
+
+  /** Enable diff-hash-based response caching to skip redundant LLM calls. Default: true. */
+  llm_cache_enabled?: boolean;
 }
 
 /** Shape of the raw JSON on disk before validation. */

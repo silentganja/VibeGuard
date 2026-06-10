@@ -38,6 +38,9 @@ const DEFAULT_CONFIG: VibeGuardConfig = {
   db_pass: "",
   db_name: "",
   db_sqlite_path: "",
+  // Phase 12 defaults
+  llm_max_retries: 3,
+  llm_cache_enabled: true,
 };
 
 // â”€â”€â”€ Project Root Discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -158,6 +161,19 @@ export function validateConfig(raw: Partial<VibeGuardConfig>): string[] {
           errors.push("db_name must be a string");
         }
       }
+    }
+  }
+
+  // Phase 12: LLM Cache & Retry validation (all fields optional)
+  if (raw.llm_max_retries !== undefined) {
+    if (typeof raw.llm_max_retries !== "number" || raw.llm_max_retries < 0 || raw.llm_max_retries > 10) {
+      errors.push("llm_max_retries must be a number between 0 and 10");
+    }
+  }
+
+  if (raw.llm_cache_enabled !== undefined) {
+    if (typeof raw.llm_cache_enabled !== "boolean") {
+      errors.push("llm_cache_enabled must be a boolean (true or false)");
     }
   }
 

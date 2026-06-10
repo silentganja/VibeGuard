@@ -18,6 +18,7 @@ import * as os from "node:os";
 import { findProjectRoot } from "./config";
 import { isHeadless, detectCIPlatform } from "../compliance/ci";
 import * as ui from "../cli/ui";
+import { ensureCacheGitignored } from "../utils/cache";
 
 // â”€â”€â”€ Hook Script (Bash) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -216,6 +217,10 @@ export function installHook(): void {
     ui.muted(`PowerShell fallback â†’ ${psHookPath}`);
     ui.muted("(The bash hook runs automatically via Git Bash.)");
   }
+
+
+  // Phase 12: Ensure LLM response cache directory is never committed.
+  ensureCacheGitignored(projectRoot);
 
   // â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ui.space();
