@@ -1,14 +1,10 @@
 # VibeGuard
 
-**CLI-native adversarial local QA daemon** — intercepts `git push`, enforces code quality standards, extracts diffs, analyzes changes via your own LLM, maps endpoints to executable URLs, guards your database, generates red-team payloads, fires live HTTP attacks, auto-generates security patches, runs in CI/CD pipelines with zero config files, compiles to standalone native binaries, and is organized into a domain-driven architecture for open-source contribution — all before your code leaves your machine.
+**CLI-native adversarial local QA daemon** — your code doesn't leave your machine until an AI adversary has tried to break it and an AI security engineer has fixed what broke.
 
-> **Version:** VibeGuard Engine v1.0.0 (2026) · **Phase 11:** Domain-Driven Architecture
+> **v1.0.0** · 11-phase engine · 27 source modules · Zero runtime dependencies
 >
-> **Philosophy:** Your code should not leave your machine — or your CI pipeline — until an AI adversary has tried to break it and an AI security engineer has fixed what broke. No external APIs, no runtime dependencies, no config files in production.
-
-> **v1.0.0** · 11-phase engine · 27 source modules (7 domain directories) · Zero runtime dependencies
-
-> **⚠️ Model Requirement:** VibeGuard performs at **100% capability on unfiltered/uncensored AI models**. The LLM is instructed to think like an adversary — generating real SQL injection payloads, command injection strings, XSS vectors, and auth bypass attacks. **Filtered or safety-aligned models (e.g., some cloud-hosted, RLHF-heavy models) may refuse to generate exploit payloads**, causing Phase 5 (payload generation) and Phase 7 (patch generation) to fall back to deterministic defaults. For full adversarial coverage, use a local unfiltered model (Ollama with Llama 3, Mistral, CodeLlama, etc.) or a model with minimal refusal tuning.
+> **⚠️ Model Requirement:** VibeGuard performs at **100% capability on unfiltered/uncensored AI models**. Filtered or safety-aligned models (RLHF-heavy, cloud-hosted) may refuse to generate exploit payloads, causing Phase 5/7 to fall back to deterministic defaults. Use a local unfiltered model (Ollama + Llama 3 / Mistral) for full adversarial coverage.
 
 ---
 
@@ -19,22 +15,9 @@
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Commands](#commands)
-- [Configuration (.vibeguard.json)](#configuration)
+- [Configuration](#configuration)
 - [CI/CD Usage](#cicd-usage)
 - [Phase-by-Phase Breakdown](#phase-by-phase-breakdown)
-  - [Phase 1 — Git Diff Extraction](#phase-1--git-diff-extraction)
-  - [Phase 2 — Noise Filter & LLM Analysis](#phase-2--noise-filter--llm-analysis)
-  - [Phase 3 — Target Mapper & Connectivity Check](#phase-3--target-mapper--connectivity-check)
-  - [Phase 4 — Database State Guard](#phase-4--database-state-guard)
-  - [Phase 5 — Compliance & Payload Generation](#phase-5--compliance--payload-generation)
-  - [Phase 6 — Live Execution & Response Assertion](#phase-6--live-execution--response-assertion)
-  - [Phase 7 — Self-Healing Patch Engine](#phase-7--self-healing-patch-engine)
-  - [Phase 8 — Minimalist UX & Terminal Output Engine](#phase-8--minimalist-ux--terminal-output-engine)
-  - [Phase 9 — CI/CD Mirroring & Enterprise Configuration](#phase-9--cicd-mirroring--enterprise-configuration)
-  - [Phase 10 — Open-Source Packaging & Distribution](#phase-10--open-source-packaging--distribution)
-  - [Phase 11 — Domain-Driven Architecture Refactoring](#phase-11--domain-driven-architecture-refactoring)
-- [Pre-Push Hook Behavior](#pre-push-hook-behavior)
-- [Pipeline Flow](#pipeline-flow)
 - [Project Structure](#project-structure)
 - [Packaging & Distribution](#packaging--distribution)
 - [Troubleshooting](#troubleshooting)
@@ -47,77 +30,38 @@
 ```
                          ┌─────────────────────┐
                          │    git push          │
-                         │  (developer action)  │
                          └─────────┬───────────┘
                                    │
                          ┌─────────▼───────────┐
-                         │  .git/hooks/pre-push │  ← installed by `vibeguard install`
-                         │  (bash / PowerShell) │
+                         │  .git/hooks/pre-push │  ← `vibeguard install`
                          └─────────┬───────────┘
-                                   │ invokes `vibeguard run`
                                    │
         ┌──────────────────────────┼──────────────────────────┐
-        │                          │                          │
         ▼                          ▼                          ▼
 ┌───────────────┐    ┌───────────────────────┐    ┌─────────────────────┐
 │  Phase 5a     │    │  Phase 1+2            │    │  Phase 3            │
-│  compliance/compliance.ts│    │  analyzer/git.ts → analyzer/parser.ts   │    │  infrastructure/checker.ts         │
-│               │    │  → infrastructure/llm.ts             │    │  analyzer/mapper.ts          │
-│ README check  │    │                       │    │                     │
-│ Commit lint   │───▶│ Extract diff          │───▶│ Probe dev server    │
-│               │    │ Strip noise           │    │ Resolve file→URL    │
-│ (runs FIRST)  │    │ LLM analysis          │    │ (dual strategy)     │
+│  Compliance   │    │  git → parser → llm   │    │  checker + mapper   │
+│  README check │───▶│  Extract diff          │───▶│  Probe dev server   │
+│  Commit lint  │    │  Strip noise           │    │  Resolve file→URL   │
 └───────────────┘    └───────────────────────┘    └──────────┬──────────┘
                                                              │
-                                      ┌──────────────────────┘
-                                      │
-                         ┌────────────▼────────────┐
-                         │  Phase 4                │
-                         │  infrastructure/dbGuard.ts             │
-                         │                         │
-                         │  Discover SQL tables    │
-                         │  Snapshot DB state      │
-                         └────────────┬────────────┘
-                                      │
-                         ┌────────────▼────────────┐
-                         │  Phase 5b + 6           │
-                         │  engine/payloadGen.ts          │
-                         │  engine/runner.ts              │
-                         │  engine/assertion.ts           │
-                         │                         │
-                         │  Generate red-team      │
-                         │  payloads via LLM       │
-                         │  Fire HTTP requests     │
-                         │  (3s timeout, parallel) │
-                         │  Judge responses        │
-                         │  (status, DB leak,      │
-                         │   auth bypass)          │
-                         └────────────┬────────────┘
-                                      │
-                         ┌────────────▼────────────┐
-                         │  Phase 7                │
-                         │  engine/healer.ts              │
-                         │                         │
-                         │  For each vuln found:   │
-                         │  Read source file       │
-                         │  Send exploit context   │
-                         │  + code to LLM          │
-                         │  Receive patched code   │
-                         │  Generate unified diff  │
-                         │  Write .patch files     │
-                         │  (NEVER auto-apply)     │
-                         └────────────┬────────────┘
-                                      │
-                         ┌────────────▼────────────┐
-                         │  Phase 4b + Verdict     │
-                         │                         │
-                         │  Restore DB state       │
-                         │  Combined verdict:      │
-                         │  LLM + live test pass   │
-                         │  → exit 0 (push)        │
-                         │  Any failure → exit 1   │
-                         │  Show patch paths       │
-                         └─────────────────────────┘
+                         ┌───────────────────────────────────┘
+                         ▼
+┌────────────────────┐    ┌───────────────────────┐    ┌────────────────────┐
+│  Phase 4           │    │  Phase 5b + 6          │    │  Phase 7           │
+│  DB Guard          │    │  payload → run → assert│    │  Healer            │
+│  Snapshot tables   │───▶│  Generate red-team     │───▶│  LLM remediation   │
+│                    │    │  Fire HTTP (parallel)  │    │  Unified diff patch│
+└────────────────────┘    └───────────────────────┘    └──────────┬─────────┘
+                                                                  │
+┌─────────────────────────────────────────────────────────────────┘
+▼
+┌────────────────────────┐
+│  Phase 4b + Verdict    │
+│  Restore DB state      │
+│  Pass → exit 0 (push)  │
+│  Any failure → exit 1  │
+└────────────────────────┘
 ```
 
 **Zero runtime dependencies.** Everything runs on Node.js built-ins and native CLI tools (`git`, `mysqldump`, `pg_dump`). The LLM is your own — local or remote. Works identically in local terminals and CI/CD pipelines via automatic environment detection.
@@ -126,119 +70,61 @@
 
 ## Model Requirements
 
-VibeGuard's adversarial capabilities depend on the LLM's willingness to think like an attacker. The system prompts instruct the model to generate real exploit payloads and security patches — tasks that some safety-aligned models may refuse.
+VibeGuard's adversarial capabilities depend on the LLM's willingness to think like an attacker.
 
 ### Unfiltered Models (100% Capability)
 
-Unfiltered or minimally-filtered models execute all VibeGuard phases at full capacity:
-
-| Model | Type | Phase 5 (Payloads) | Phase 7 (Patches) |
+| Model | Host | Phase 5 (Payloads) | Phase 7 (Patches) |
 |---|---|---|---|
-| **Llama 3 / 3.1** (8B, 70B, 405B) | Local — Ollama / vLLM | ✅ Full adversarial payloads | ✅ Full remediation patches |
-| **Mistral / Mixtral** (7B, 8×7B) | Local — Ollama / vLLM | ✅ Full adversarial payloads | ✅ Full remediation patches |
-| **CodeLlama** (7B, 13B, 34B) | Local — Ollama / vLLM | ✅ Full adversarial payloads | ✅ Full remediation patches |
-| **DeepSeek Coder / V3** | Local + Cloud | ✅ Full adversarial payloads | ✅ Full remediation patches |
-| **Qwen 2.5 Coder** (7B, 32B) | Local — Ollama / vLLM | ✅ Full adversarial payloads | ✅ Full remediation patches |
-| **Claude (Anthropic API)** | Cloud | ⚠️ May refuse some payloads | ✅ Full remediation patches |
+| **Llama 3 / 3.1** (8B–405B) | Ollama / vLLM | ✅ Full adversarial | ✅ Full remediation |
+| **Mistral / Mixtral** (7B, 8×7B) | Ollama / vLLM | ✅ Full adversarial | ✅ Full remediation |
+| **CodeLlama** (7B–34B) | Ollama / vLLM | ✅ Full adversarial | ✅ Full remediation |
+| **DeepSeek Coder / V3** | Local + Cloud | ✅ Full adversarial | ✅ Full remediation |
+| **Qwen 2.5 Coder** (7B–32B) | Ollama / vLLM | ✅ Full adversarial | ✅ Full remediation |
 
 ### Filtered / Safety-Aligned Models (Reduced Capability)
 
-Models with heavy RLHF safety tuning may refuse to generate exploit payloads. When this happens, VibeGuard **automatically falls back** to deterministic payloads (70+ built-in attack values across 14 vectors). Phase 7 patches may also be affected — the model may refuse to analyze or modify code it deems "harmful."
-
-| Model | Issue | Fallback Behavior |
+| Model | Issue | Fallback |
 |---|---|---|
-| **GPT-4o / GPT-4** (OpenAI) | May refuse SQL injection / RCE payload generation | Falls back to deterministic payload library |
-| **Gemini** (Google) | Heavy safety filtering on adversarial prompts | Falls back to deterministic payload library |
-| **Claude** (Anthropic) | May refuse overtly malicious payloads (RCE, SQLi) | Falls back to deterministic payload library |
-| **Phi-3/4** (Microsoft) | Alignment tuning may block red-team prompts | Falls back to deterministic payload library |
+| **GPT-4o / GPT-4** | May refuse SQLi/RCE payloads | Deterministic library (70+ values) |
+| **Gemini** | Heavy safety filtering | Deterministic library |
+| **Claude** (Anthropic) | May refuse overtly malicious payloads | Deterministic library |
+| **Phi-3/4** | Alignment tuning blocks red-team | Deterministic library |
 
-### Recommendation
-
-> **For full adversarial coverage, use a local unfiltered model.** Install [Ollama](https://ollama.com), pull `llama3.1:8b` or `mistral:7b`, and configure VibeGuard:
+> **Recommendation:** Use a local unfiltered model. Install [Ollama](https://ollama.com), pull `llama3.1:8b`, and configure:
 > ```json
-> {
->   "llm_provider": "custom",
->   "llm_api_endpoint": "http://localhost:11434/v1",
->   "llm_api_key": "ollama",
->   "llm_model": "llama3.1:8b"
-> }
+> { "llm_provider": "custom", "llm_api_endpoint": "http://localhost:11434/v1", "llm_api_key": "ollama", "llm_model": "llama3.1:8b" }
 > ```
-
-**Why this matters:**
-- **Phase 5 (Payload Generation):** Filtered models may refuse to craft `' OR 1=1--` strings or `<script>alert(1)</script>` vectors. The deterministic fallback covers all 14 vulnerability classes, but lacks context-awareness (e.g., it won't know your endpoint expects `user_uuid` specifically).
-- **Phase 7 (Patch Generation):** Filtered models may refuse to analyze vulnerable code or output "I cannot assist with that." The push still blocks, but you won't get a remediation patch — you'll need to fix the code manually.
-- **Phase 2 (LLM Analysis):** Generally works on all models — vulnerability analysis is a defensive task that rarely triggers safety filters.
 
 ---
 
 ## Installation
 
-### Prerequisites
-
-- **Node.js** ≥ 18 (uses `fetch`, `AbortController`, and ES2020)
-- **Git** ≥ 2.0
-- A running **LLM** (see [LLM Provider Setup](#llm-provider-setup))
-- (Optional) **MySQL** / **PostgreSQL** / **SQLite** — for Phase 4 database state guarding
-
-### Steps
+**Prerequisites:** Node.js ≥ 18, Git ≥ 2.0, a running LLM.
 
 ```bash
-# Clone the repository
 git clone https://github.com/silentganja/VibeGuard.git
 cd VibeGuard
-
-# Install TypeScript compiler (only dev dependency)
-npm install
-
-# Compile TypeScript → JavaScript
-npm run build
-
-# Make `vibeguard` available globally on your PATH
-npm link
+npm install        # TypeScript + esbuild (only dev deps)
+npm run build:all  # Compile + bundle
+npm link           # Make `vibeguard` globally available
 ```
 
-### Verify Installation
-
-```bash
-vibeguard
-```
-
-You should see the usage screen with the current phase and version.
+Verify: `vibeguard --version` → `VibeGuard Engine v1.0.0 (2026)`
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Navigate to any git repository
-cd ~/projects/my-php-app
-
-# 2. Create your configuration interactively
-vibeguard init
-
-# 3. Install the git pre-push hook
-vibeguard install
-
-# 4. Make some changes and push — VibeGuard activates automatically
-git add .
-git commit -m "Add login endpoint"
-git push
+cd ~/projects/my-app
+vibeguard init       # Interactive config wizard
+vibeguard install    # Install git pre-push hook
+git commit -m "feat: add login endpoint"
+git push             # VibeGuard activates automatically
 ```
 
-On every `git push`, VibeGuard will:
-1. Validate your README is current and your commit follows Conventional Commits.
-2. Extract the exact diff of what you're about to push.
-3. Strip out non-functional noise (CSS, docs, comments).
-4. Verify your local dev server is reachable.
-5. Send code changes to your LLM for adversarial analysis (Sovereign System Architect).
-6. Resolve modified files to reachable HTTP URLs (traditional + framework mapping).
-7. Snapshot your database tables (SQLite/MySQL/PostgreSQL).
-8. Generate red-team attack payloads via LLM (with deterministic fallback).
-9. Fire payloads live against your server (parallel, 3s timeout each).
-10. Run security assertions on every response (status code, DB leaks, auth bypass).
-11. **Generate self-healing patches** for every confirmed vulnerability (Phase 7).
-12. Restore your database to its pre-test state.
-13. Report the combined verdict — pass or block the push. Show available patches.
+On every `git push`, VibeGuard validates your README + commit message, extracts the diff, analyzes via your LLM, maps endpoints, snapshots your DB, fires live exploits, judges responses, generates patches, restores your DB, and reports the verdict.
 
 ---
 
@@ -246,45 +132,31 @@ On every `git push`, VibeGuard will:
 
 | Command | Description |
 |---|---|
-| `vibeguard init` | Interactive wizard — creates `.vibeguard.json` at the repo root. |
-| `vibeguard install` | Writes the `pre-push` hook into `.git/hooks/`. Backs up existing hooks. Skips gracefully in CI. |
-| `vibeguard uninstall` | Removes the VibeGuard hook. Restores previous hook from backup if one exists. |
-| `vibeguard config` | Prints the current configuration with all fields. |
-| `vibeguard run` | **[Internal]** Invoked by the pre-push hook. Runs the full 10-phase pipeline. |
-| `vibeguard --version` / `-v` | Prints version (`VibeGuard Engine v1.0.0 (2026)`) and exits. |
+| `vibeguard init` | Interactive wizard — creates `.vibeguard.json` |
+| `vibeguard install` | Writes `pre-push` hook into `.git/hooks/`. Skips gracefully in CI. |
+| `vibeguard uninstall` | Removes the VibeGuard hook, restores backup if present. |
+| `vibeguard config` | Prints current configuration. |
+| `vibeguard run` | **[Internal]** Full pipeline — invoked by the pre-push hook. |
+| `vibeguard --version` / `-v` | Prints version and exits. |
 | `vibeguard --help` / `-h` | Shows usage and command reference. |
 
-### `vibeguard run` (Internal)
-
-Called automatically by the pre-push hook with these flags:
-
-```
-vibeguard run --local <branch> --remote <branch> --sha <commit-ish>
-```
-
-You can also run it manually to test the pipeline without pushing:
-
-```bash
-vibeguard run --local main --remote origin/main
-```
+`vibeguard run` flags: `--local <branch> --remote <branch> --sha <commit-ish>`
 
 ---
 
 ## Configuration
 
-VibeGuard reads `.vibeguard.json` from the root of your git repository. Run `vibeguard init` to create it interactively, or write it by hand.
-
 ### Full Schema
 
 ```json
 {
-  "llm_provider": "custom",
+  "llm_provider": "custom",           // "custom" | "openai" | "anthropic"
   "llm_api_endpoint": "http://localhost:11434/v1",
-  "llm_api_key": "$LLM_API_KEY",
+  "llm_api_key": "$LLM_API_KEY",      // raw string or $ENV_VAR reference
   "llm_model": "llama3:8b",
   "target_local_url": "http://localhost:8000",
   "exclude_paths": ["node_modules/**", "vendor/**", ".git/**", "dist/**"],
-  "db_type": "none",
+  "db_type": "none",                  // "mysql" | "postgresql" | "sqlite" | "none"
   "db_host": "127.0.0.1",
   "db_port": 3306,
   "db_user": "root",
@@ -296,101 +168,37 @@ VibeGuard reads `.vibeguard.json` from the root of your git repository. Run `vib
 
 ### Field Reference
 
-#### LLM Configuration (Required)
-
-| Field | Type | Description |
-|---|---|---|
-| `llm_provider` | `"custom"` \| `"openai"` \| `"anthropic"` | Which API format to use. `custom` is OpenAI-compatible (works with Ollama, LM Studio, vLLM, LocalAI, etc.). |
-| `llm_api_endpoint` | `string` (URL) | Full URL to your LLM's API. For Ollama: `http://localhost:11434/v1`. For LM Studio: `http://localhost:1234/v1`. For OpenAI: `https://api.openai.com/v1`. |
-| `llm_api_key` | `string` | API key for authentication. Use `$ENV_VAR` syntax to reference environment variables (e.g., `$OPENAI_API_KEY`). This keeps secrets out of the config file. |
-| `llm_model` | `string` | Model identifier. Examples: `llama3:8b`, `gpt-4o`, `claude-sonnet-4-6`, `codellama:7b`. Must match a model available at your endpoint. |
-
-#### Target Server Configuration (Required)
-
-| Field | Type | Description |
-|---|---|---|
-| `target_local_url` | `string` (URL) | Base URL of your locally running dev server. VibeGuard probes this before analysis. Examples: `http://localhost:8000`, `http://localhost:3000`, `http://localhost/my-app`. |
-| `exclude_paths` | `string[]` | Glob-style patterns to exclude from git diff. Typical values: `node_modules/**`, `vendor/**`, `.git/**`, `dist/**`, `build/**`. |
-
-#### Database State Guard (Optional — Phase 4)
-
-| Field | Type | Default | Description |
+| Field | Type | Required | Description |
 |---|---|---|---|
-| `db_type` | `"mysql"` \| `"postgresql"` \| `"sqlite"` \| `"none"` | `"none"` | Database dialect to guard. Set to `"none"` to skip DB snapshots entirely. |
-| `db_host` | `string` | `"127.0.0.1"` | Database hostname or IP. Used by MySQL and PostgreSQL. |
-| `db_port` | `number` | `3306` (MySQL) / `5432` (PostgreSQL) | Database port. |
-| `db_user` | `string` | `"root"` | Database user with read/write access for dump and restore. |
-| `db_pass` | `string` | `""` | Database password. Supports `$ENV_VAR` references (e.g., `$DB_PASSWORD`). |
-| `db_name` | `string` | `""` | Database or schema name to connect to. |
-| `db_sqlite_path` | `string` | `""` | Absolute or relative path to the SQLite `.db` file. Only used when `db_type` is `"sqlite"`. |
-
-### LLM Provider Setup
+| `llm_provider` | `"custom"` \| `"openai"` \| `"anthropic"` | Yes | API format. `custom` = OpenAI-compatible (Ollama, vLLM, LM Studio). |
+| `llm_api_endpoint` | URL | Yes | LLM API endpoint. |
+| `llm_api_key` | string | Yes | API key. Prefix with `$` for env-var lookup (`$OPENAI_API_KEY`). |
+| `llm_model` | string | Yes | Model ID (`llama3:8b`, `gpt-4o`, `claude-sonnet-4-6`). |
+| `target_local_url` | URL | Yes | Base URL of your dev server. |
+| `exclude_paths` | string[] | No | Glob patterns excluded from diff analysis. |
+| `db_*` | varies | No | Phase 4 DB guard. Set `db_type: "none"` to skip. |
 
 <details>
-<summary><strong>Ollama (local — recommended for privacy)</strong></summary>
+<summary><strong>LLM Provider Setup Examples</strong></summary>
 
+**Ollama (recommended):**
 ```json
-{
-  "llm_provider": "custom",
-  "llm_api_endpoint": "http://localhost:11434/v1",
-  "llm_api_key": "ollama",
-  "llm_model": "llama3:8b"
-}
+{ "llm_provider": "custom", "llm_api_endpoint": "http://localhost:11434/v1", "llm_api_key": "ollama", "llm_model": "llama3:8b" }
 ```
 
-```bash
-# Install and start Ollama
-ollama pull llama3:8b
-ollama serve
-```
-</details>
-
-<details>
-<summary><strong>LM Studio (local — GUI)</strong></summary>
-
+**LM Studio:**
 ```json
-{
-  "llm_provider": "custom",
-  "llm_api_endpoint": "http://localhost:1234/v1",
-  "llm_api_key": "lm-studio",
-  "llm_model": "local-model"
-}
+{ "llm_provider": "custom", "llm_api_endpoint": "http://localhost:1234/v1", "llm_api_key": "lm-studio", "llm_model": "local-model" }
 ```
 
-Start the local server in LM Studio's UI before using VibeGuard.
-</details>
-
-<details>
-<summary><strong>OpenAI</strong></summary>
-
+**OpenAI:**
 ```json
-{
-  "llm_provider": "openai",
-  "llm_api_endpoint": "https://api.openai.com/v1",
-  "llm_api_key": "$OPENAI_API_KEY",
-  "llm_model": "gpt-4o"
-}
+{ "llm_provider": "openai", "llm_api_endpoint": "https://api.openai.com/v1", "llm_api_key": "$OPENAI_API_KEY", "llm_model": "gpt-4o" }
 ```
 
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-</details>
-
-<details>
-<summary><strong>Anthropic (Claude)</strong></summary>
-
+**Anthropic:**
 ```json
-{
-  "llm_provider": "anthropic",
-  "llm_api_endpoint": "https://api.anthropic.com",
-  "llm_api_key": "$ANTHROPIC_API_KEY",
-  "llm_model": "claude-sonnet-4-6"
-}
-```
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
+{ "llm_provider": "anthropic", "llm_api_endpoint": "https://api.anthropic.com", "llm_api_key": "$ANTHROPIC_API_KEY", "llm_model": "claude-sonnet-4-6" }
 ```
 </details>
 
@@ -398,36 +206,24 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 ## CI/CD Usage
 
-VibeGuard runs in CI/CD pipelines with **zero config files** — everything is configured via environment variables. No `.vibeguard.json` is needed in your repository (and it should be `.gitignore`'d anyway).
+VibeGuard runs in CI/CD with **zero config files** — everything via environment variables.
 
-### GitHub Actions
+<details>
+<summary><strong>GitHub Actions</strong></summary>
 
 ```yaml
 name: VibeGuard Security Scan
-
 on: [push, pull_request]
-
 jobs:
   security-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Required for git diff extraction
-
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install VibeGuard
-        run: npm install -g vibeguard
-
-      - name: Start Test Server
-        run: |
-          # Start your dev server in the background
-          npm start &
-          sleep 5  # Wait for server to be ready
-
+        with: { node-version: '20' }
+      - run: npm install -g vibeguard
+      - run: npm start & sleep 5
       - name: Run VibeGuard
         env:
           VIBE_LLM_PROVIDER: custom
@@ -435,803 +231,155 @@ jobs:
           VIBE_LLM_KEY: ${{ secrets.VIBE_LLM_KEY }}
           VIBE_LLM_MODEL: llama3.1:8b
           VIBE_TARGET_URL: http://localhost:3000
-        run: vibeguard run --local ${{ github.ref_name }} --remote origin/${{ github.base_ref || github.ref_name }}
+        run: vibeguard run --local ${{ github.ref_name }} --remote origin/main
 ```
+</details>
 
-### GitLab CI
+<details>
+<summary><strong>GitLab CI</strong></summary>
 
 ```yaml
-vibeguard-scan:
+vibeguard:
+  stage: test
   image: node:20
+  before_script:
+    - npm install -g vibeguard
+    - npm start & sleep 5
+  script:
+    - vibeguard run --local $CI_COMMIT_BRANCH --remote origin/main
   variables:
     VIBE_LLM_PROVIDER: custom
     VIBE_LLM_ENDPOINT: $VIBE_LLM_ENDPOINT
     VIBE_LLM_KEY: $VIBE_LLM_KEY
     VIBE_LLM_MODEL: llama3.1:8b
-    VIBE_TARGET_URL: http://localhost:8000
-  script:
-    - npm install -g vibeguard
-    - npm start & sleep 5
-    - vibeguard run --local $CI_COMMIT_BRANCH --remote origin/$CI_DEFAULT_BRANCH
+    VIBE_TARGET_URL: http://localhost:3000
 ```
+</details>
 
-### Jenkins / Generic CI
+<details>
+<summary><strong>Jenkins / Generic CI</strong></summary>
 
 ```bash
 export VIBE_LLM_PROVIDER=custom
-export VIBE_LLM_ENDPOINT=http://localhost:11434/v1
-export VIBE_LLM_KEY=ollama
+export VIBE_LLM_ENDPOINT="$LLM_ENDPOINT"
+export VIBE_LLM_KEY="$LLM_KEY"
 export VIBE_LLM_MODEL=llama3.1:8b
-export VIBE_TARGET_URL=http://localhost:8000
-
-npm install -g vibeguard
-vibeguard run --local main --remote origin/main
+export VIBE_TARGET_URL=http://localhost:3000
+vibeguard run --local "$BRANCH" --remote origin/main
 ```
+</details>
 
-### Enterprise Mode
-
-Force headless mode on any machine (useful for testing CI behavior locally):
-
-```bash
-VIBE_ENV=enterprise vibeguard run --local main --remote origin/main
-```
-
-### CI Output Format
-
-When running in CI, VibeGuard outputs machine-readable log lines:
-
-```
-[VibeGuard] PUSH BLOCKED — 2 vulnerability/ies confirmed
-[VibeGuard] Platform: GitHub Actions
-[VibeGuard]
-[VibeGuard] THREAT 1/2 | sql_injection | HIGH
-[VibeGuard]   URL:       POST http://localhost:8000/api/login.php
-[VibeGuard]   Payload:   username=admin' OR '1'='1
-[VibeGuard]   Signature: You have an error in your SQL syntax...
-[VibeGuard]   Status:    500 | 42ms
-[VibeGuard]
-[VibeGuard] RESULT: 2 vulnerability/ies found — build failed
-```
-
-Grep-friendly: `vibeguard run ... 2>&1 | grep '\[VibeGuard\]'`
+**Environment Variables:** `VIBE_LLM_PROVIDER` · `VIBE_LLM_ENDPOINT` · `VIBE_LLM_KEY` · `VIBE_LLM_MODEL` · `VIBE_TARGET_URL` · `VIBE_EXCLUDE_PATHS` · `VIBE_DB_TYPE` · `VIBE_DB_HOST` · `VIBE_DB_PORT` · `VIBE_DB_USER` · `VIBE_DB_PASS` · `VIBE_DB_NAME` · `VIBE_DB_SQLITE_PATH`
 
 ---
 
 ## Phase-by-Phase Breakdown
 
-### Phase 1 — Git Diff Extraction
+<details>
+<summary><strong>Phase 1 — Git Diff Extraction</strong></summary>
 
-**Module:** [`src/analyzer/git.ts`](src/analyzer/git.ts)
+[`src/analyzer/git.ts`](src/analyzer/git.ts)
 
-- Resolves the remote tracking branch (`origin/main`) for your current local branch.
-- Runs `git diff <upstream>...HEAD` — the three-dot syntax captures exactly the changes about to be pushed, excluding anything already on the remote.
-- Parses the unified diff into structured objects: `DiffFile` → `DiffHunk` → `DiffLine`.
-- Respects `exclude_paths` from `.vibeguard.json` via git's `:(exclude)` pathspec.
-- Outputs a `DiffResult` with per-file additions, deletions, hunks, and the raw diff text.
-
-### Phase 2 — Noise Filter & LLM Analysis
-
-**Modules:** [`src/analyzer/parser.ts`](src/analyzer/parser.ts) · [`src/infrastructure/llm.ts`](src/infrastructure/llm.ts)
-
-#### 2a — Noise Filter (`src/analyzer/parser.ts`)
-
-Runs **locally and deterministically** — the LLM never sees non-functional changes.
-
-- **File Extension Whitelisting**: Keeps functional code (`.php`, `.js`, `.ts`, `.go`, `.py`, `.rb`, `.java`, `.rs`, etc.). Discards `.css`, `.scss`, `.md`, `.svg`, fonts, images, audio, video, archives, source maps, and lockfiles.
-- **JSON Handling**: Discards all `.json` except known config/manifest files (`package.json`, `composer.json`, `tsconfig.json`, `.vibeguard.json`) and files under `config/` or `.github/` directories.
-- **Comment Stripping**: Removes single-line comments (`//`, `#`, `--`), multi-line block comments (`/* ... */`), JSDoc/PHPDoc continuations (` * @param`), and Python/Elixir docstrings (`"""..."""`). Inline comment stripping is string-literal-aware to avoid false positives on URLs containing `//`.
-- **Whitespace Filtering**: Drops lines that are only whitespace changes.
-- **Hunk Context Extraction**: Infers the surrounding function, class, method, or route name from git's `@@` hunk headers using 12+ language-specific regex patterns.
-- **Token Estimation**: Character-based heuristic (~3.5 chars/token) for payload sizing.
+- Resolves the remote tracking branch (`origin/main`) and runs `git diff <upstream>...HEAD`.
+- Three-dot syntax captures exactly what's about to be pushed.
+- Parses unified diff → `DiffFile` → `DiffHunk` → `DiffLine` structured objects.
+- Respects `exclude_paths` via git's `:(exclude)` pathspec.
+</details>
 
-#### 2b — LLM Analysis (`src/infrastructure/llm.ts`)
+<details>
+<summary><strong>Phase 2 — Noise Filter & LLM Analysis</strong></summary>
 
-Sends the filtered diff to your configured LLM with a **Sovereign System Architect** system prompt.
+[`src/analyzer/parser.ts`](src/analyzer/parser.ts) · [`src/infrastructure/llm.ts`](src/infrastructure/llm.ts)
 
-The prompt instructs the model to:
-1. Think adversarially — assume every user input is hostile.
-2. Infer routes, HTTP methods, and parameters from code context.
-3. Detect the *intent* behind each change, not just the mechanics.
-4. Flag concrete vulnerability vectors with evidence from the diff.
+**2a — Noise Filter:** Runs locally. File extension whitelist (50+ languages), comment stripping (single-line, block, JSDoc, docstrings), lockfile exclusion, whitespace removal. Outputs token-optimized `FilteredDiff` with discarded-file audit trail.
 
-**Response Schema** (strict JSON mode):
+**2b — LLM Analysis:** "Sovereign System Architect" persona. Supports OpenAI-compatible (`/chat/completions`) and Anthropic (`/messages`) APIs. 6-second timeout, JSON-mode response format, fallback extraction from markdown-fenced responses. Produces `AnalysisVerdict` with pass/fail + per-file risk summary.
+</details>
 
-```json
-{
-  "modified_endpoints": [
-    {
-      "file_path": "api/login.php",
-      "estimated_route": "/api/login.php",
-      "http_method": "POST",
-      "detected_intent": "Authenticates user by username/password, issues JWT token.",
-      "vulnerability_vectors": ["sql_injection"],
-      "input_parameters": ["username", "password", "POST_body"]
-    }
-  ]
-}
-```
+<details>
+<summary><strong>Phase 3 — Connectivity Check & Route Mapping</strong></summary>
 
-**Supported vulnerability vectors:** `sql_injection`, `privilege_escalation`, `auth_bypass`, `rce`, `input_fuzzing`, `xss`, `path_traversal`, `ssrf`, `idor`, `race_condition`, `deserialization`, `information_disclosure`, `misconfiguration`, `other`.
+[`src/infrastructure/checker.ts`](src/infrastructure/checker.ts) · [`src/analyzer/mapper.ts`](src/analyzer/mapper.ts)
 
-**Timeout:** 6 seconds. If your LLM doesn't respond within the deadline, VibeGuard aborts with a dark-mode warning and blocks the push (exit code 1). This prevents the hook from blocking your workflow indefinitely.
+**3a — Connectivity:** Probes `target_local_url` with 1.5s timeout (HEAD → GET fallback). Blocks push immediately if unreachable.
 
-**API Support:**
-- `custom` / `openai` — OpenAI-compatible chat completions with `response_format: { type: "json_object" }` and Bearer token auth.
-- `anthropic` — Anthropic Messages API with `{` prefill to force JSON output. Uses `x-api-key` header.
+**3b — Route Mapping:** Dual-strategy resolution — traditional (file path → URL, public subfolder detection) and framework (Laravel, Symfony, Next.js, Go, Rails sentinel files). Cross-references LLM's `estimated_route` with filesystem layout.
+</details>
 
-**Severity-based Verdict:**
-| Severity | Vectors | Result |
-|---|---|---|
-| **Critical** | `rce`, `auth_bypass` | Push blocked |
-| **High** | `sql_injection`, `privilege_escalation`, `deserialization` | Push blocked |
-| **Medium** | `ssrf`, `path_traversal`, `idor`, `information_disclosure` | Warn (push allowed, findings shown) |
-| **Low** | `xss`, `input_fuzzing`, `misconfiguration`, `race_condition` | Pass with note |
+<details>
+<summary><strong>Phase 4 — Database State Guard</strong></summary>
 
-### Phase 3 — Target Mapper & Connectivity Check
+[`src/infrastructure/dbGuard.ts`](src/infrastructure/dbGuard.ts)
 
-**Modules:** [`src/infrastructure/infrastructure/checker.ts`](src/infrastructure/infrastructure/checker.ts) · [`src/analyzer/analyzer/mapper.ts`](src/analyzer/analyzer/mapper.ts)
+SQL table discovery (12 regex patterns scanning diff hunks for FROM/UPDATE/INSERT/DELETE). Three backends: SQLite (binary file copy), MySQL (`mysqldump`), PostgreSQL (`pg_dump`). Capture before Phase 5/6 payloads fire; restore after — always, even on pipeline crash (emergency restore in `catch` block).
+</details>
 
-#### 3a — Connectivity Check (`src/infrastructure/infrastructure/checker.ts`)
+<details>
+<summary><strong>Phase 5 — Compliance & Payload Generation</strong></summary>
 
-Before any mapping occurs, VibeGuard verifies your local dev server is alive:
+[`src/compliance/compliance.ts`](src/compliance/compliance.ts) · [`src/engine/payloadGen.ts`](src/engine/payloadGen.ts)
 
-- Sends an HTTP `HEAD` request to `target_local_url` with a **1.5-second timeout**.
-- Falls back to `GET` if the server returns 405 (Method Not Allowed).
-- Handles DNS failures, connection refused, timeouts, and connection resets with specific diagnostic messages.
-- If the server is unreachable, the push is **aborted immediately** (before incurring LLM API costs) with:
-  ```
-  ✕  Local development server at http://localhost:8000 is unreachable.
-     Please start your local environment before pushing.
-  ```
+**5a — Compliance:** Runs BEFORE any network calls. Validates README.md exists, is substantive (≥200 chars), contains architectural docs, and was modified within 90 days. Enforces Conventional Commits (`feat:`, `fix:`, `docs:`, etc.) on the latest commit.
 
-#### 3b — Route Resolution Engine (`src/analyzer/analyzer/mapper.ts`)
+**5b — Payload Generation:** "Red-Team Security Engineer" persona. Context-aware — targets specific parameter names from the diff. Deterministic fallback library covers all 14 vulnerability vectors with 70+ known attack values.
+</details>
 
-Cross-references the LLM's `modified_endpoints` against your local project layout using a **dual-strategy** resolver:
+<details>
+<summary><strong>Phase 6 — Live Execution & Response Assertion</strong></summary>
 
-**Strategy 1 — Traditional File-to-URL (PHP/cPanel / Apache / Nginx):**
-- Detects public subfolders: `public/`, `www/`, `htdocs/`, `web/`, `public_html/`, `html/`, `dist/`, `build/`, `static/`.
-- Verifies the directory is actually a web root (contains `index.php`, `index.html`, `.htaccess`, etc.).
-- Maps file paths to URL paths: `public/api/v1/login.php` → `/api/v1/login.php`.
-- Combines with `target_local_url`: `http://localhost:8000/api/v1/login.php`.
+[`src/engine/runner.ts`](src/engine/runner.ts) · [`src/engine/assertion.ts`](src/engine/assertion.ts)
 
-**Strategy 2 — Modern Framework Route (Next.js / Laravel / Go / Rails):**
-- Detects frameworks via sentinel files: `package.json`, `go.mod`, `composer.json` + `artisan` (Laravel) / `bin/console` (Symfony), `Gemfile`, `requirements.txt`, `pyproject.toml`, `Cargo.toml`, `mix.exs`.
-- Uses the LLM's `estimated_route` directly: `http://localhost:8000/api/users`.
-- Automatically falls back to traditional mapping when `estimated_route` is `"N/A"` or the file lives deep in source directories.
+**6a — Runner:** Parallel HTTP execution (8 concurrent), 3s timeout per request. GET → query string, POST → form-urlencoded (auto-detects JSON payloads). Captures response body (first 2000 chars), headers, status code, latency.
 
-**Output — `TargetTargets`:**
-```json
-{
-  "executable_tests": [
-    {
-      "resolved_url": "http://localhost:8000/api/v1/auth.php",
-      "http_method": "POST",
-      "input_parameters": ["username", "password"],
-      "vulnerability_vectors": ["sql_injection"],
-      "associated_file": "api/v1/auth.php"
-    }
-  ]
-}
-```
-
-### Phase 4 — Database State Guard
+**6b — Assertion Engine:** Three categories — status code (500/502/503), database leak (25+ regex signatures: MySQL, PDO, PostgreSQL, SQLite, Laravel, Django, Rails, SQLAlchemy), auth bypass (admin panel detection, user data exposure, redirect to admin areas).
+</details>
 
-**Module:** [`src/infrastructure/infrastructure/dbGuard.ts`](src/infrastructure/infrastructure/dbGuard.ts)
+<details>
+<summary><strong>Phase 7 — Self-Healing Patch Engine</strong></summary>
 
-Ensures adversarial test payloads (future Phase 5/6) never leave your database in a dirty state. Uses **zero runtime dependencies** — all operations use Node.js built-ins and native CLI tools.
+[`src/engine/healer.ts`](src/engine/healer.ts)
 
-#### Capture (`dbGuard.capture()`)
-
-Called **before** test payloads fire. Runs the appropriate strategy based on `db_type`:
-
-| Database | Strategy | Mechanism | Artifact |
-|---|---|---|---|
-| **SQLite** | Binary copy | `fs.copyFileSync()` | `.vibeguard/tmp/backup.db` |
-| **MySQL** | Per-table dump | `mysqldump --single-transaction --no-tablespaces` | `.vibeguard/tmp/table_state.sql` |
-| **PostgreSQL** | Per-table dump | `pg_dump --clean --if-exists --no-owner` | `.vibeguard/tmp/table_state.sql` |
-| **none** | No-op | — | — |
-
-**Table Discovery:** Before taking a snapshot, VibeGuard scans the filtered diff for SQL keywords to identify which tables are referenced by the changed code:
-
-- `FROM <table>`, `JOIN <table>`, `UPDATE <table>`, `INSERT INTO <table>`, `DELETE FROM <table>`, `ALTER TABLE <table>`, `CREATE TABLE <table>`, `DROP TABLE <table>`, `TRUNCATE <table>`, `REPLACE INTO <table>`
-- Filters out SQL keywords (IF, EXISTS, SET, WHERE, etc.) and short aliases.
-- Only the discovered tables are dumped — not the entire database.
+"Hardened Systems Security Engineer" persona. Exploit context aggregation (source file + payload + response signature + assertion detail). Per-vector remediation guidelines (parameterized queries for SQLi, authorization checks for auth bypass, output escaping for XSS, argument arrays for RCE, canonicalization for path traversal, allowlists for SSRF, safe formats for deserialization). LCS-based unified diff generation via [`src/utils/diff.ts`](src/utils/diff.ts). Patches written to `.vibeguard/patches/` — **never auto-applied**. Skipped in CI mode.
+</details>
 
-#### Restore (`dbGuard.restore()`)
+<details>
+<summary><strong>Phase 8 — Terminal UX</strong></summary>
 
-Called **after** test payloads conclude. Reverses all side effects:
-
-| Database | Strategy | Mechanism |
-|---|---|---|
-| **SQLite** | Binary restore | Copy backup `.db` over the active file, delete backup |
-| **MySQL** | SQL restore | `mysql < table_state.sql`, delete dump |
-| **PostgreSQL** | SQL restore | `psql -v ON_ERROR_STOP=1 < table_state.sql`, delete dump |
+[`src/cli/ux.ts`](src/cli/ux.ts)
 
-#### Emergency Restore
+ANSII-styled terminal output (bold, dim, gray, white, green, red, yellow, cyan). Threat cards (file, endpoint, payload, signature, verdict), patch cards (path, word-wrapped explanation, review/apply commands). Automatic CI/terminal dispatch via `getOutputMode()`. Machine-readable `[VibeGuard]` prefixed output for CI logs.
+</details>
 
-If any step in the pipeline throws an unhandled error, the `catch` block in `handleRun` calls `dbGuard.restore()` before exiting. This guarantees the database is never left in a dirty state — even if the LLM times out, the network fails, or a payload crashes the server.
+<details>
+<summary><strong>Phase 9 — CI/CD Detection & Enterprise Config</strong></summary>
 
-### Phase 5 — Compliance & Payload Generation
-
-**Modules:** [`src/compliance/compliance/compliance.ts`](src/compliance/compliance/compliance.ts) · [`src/engine/engine/payloadGen.ts`](src/engine/engine/payloadGen.ts)
+[`src/compliance/ci.ts`](src/compliance/ci.ts)
 
-#### 5a — Compliance Validator (`src/compliance/compliance/compliance.ts`)
-
-Runs **at the very start** of the pipeline — before any network calls, LLM API costs, or database changes. Two mandatory checks:
-
-**README Update Check:**
-- Verifies `README.md` exists at the project root.
-- Enforces minimum content length (200 chars).
-- Detects stub/template indicators (`# Project Title`, `TODO`, `[INSERT]`, `tbd`, etc.).
-- Scores for architectural documentation keywords (`architecture`, `pipeline`, `configuration`, `2026`, etc.) — requires ≥ 3 matches.
-- Checks file modification age — flags if > 90 days stale.
-
-**Semantic Commit Check:**
-- Reads the latest commit via `git log -1 --pretty=%B`.
-- Validates against 12 Conventional Commits prefixes: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `revert:`, `security:`.
-- Auto-skips merge commits.
-- Rejects vague descriptions (`"update"`, `"fix"`, `"wip"`, `"tmp"`).
-- Requires ≥ 3 characters of meaningful description after the prefix.
-
-If either check fails, the push is **aborted immediately** with exit code 1 and a high-contrast terminal warning:
-
-```
-✕  Compliance Check Failed
-
-   README Check:   FAILED
-     README.md appears to be a stub or template (contains "# Project Title").
-     Replace with real project documentation.
-
-   Commit Check:   PASSED
-
-   Push blocked — compliance checks must pass before analysis proceeds.
-```
-
-#### 5b — Red-Team Payload Generator (`src/engine/engine/payloadGen.ts`)
-
-Sends the Phase 3 `TargetTargets` + Phase 2 diff context to your LLM with a **Red-Team Security Engineer** system prompt.
-
-**LLM-driven generation:**
-- Requires context-aware payloads — if an endpoint expects `user_uuid`, the payload injects into that specific field: `user_uuid=1' OR '1'='1`.
-- One payload per vulnerability vector per endpoint.
-- Each payload includes `expected_fail_criteria` describing what response indicates a successful breach.
-
-**Response Schema:**
-```json
-{
-  "attack_suite": [
-    {
-      "target_url": "http://localhost:8000/api/login.php",
-      "method": "POST",
-      "attack_type": "sql_injection",
-      "payload_data": {
-        "username": "admin' OR '1'='1",
-        "password": "anything' OR 1=1--"
-      },
-      "expected_fail_criteria": "HTTP 200 with session token — SQL injection bypassed authentication"
-    }
-  ]
-}
-```
+Detects 15 CI platforms via environment flags. Headless detection via CI env vars + `VIBE_ENV=enterprise` + `!process.stdin.isTTY`. 14 `VIBE_*` env vars mapped to `VibeGuardConfig`. Config resolution: CI env vars → local `.vibeguard.json` → env var fallback. Hook installation/uninstallation skipped in CI. Phase 7 patch generation skipped in CI.
+</details>
 
-**Deterministic Fallback Generator:**
-If the LLM is unreachable or returns unparseable JSON, VibeGuard falls back to a built-in payload library covering all 14 vulnerability vectors with 70+ known attack values:
+<details>
+<summary><strong>Phase 10 — Packaging & Distribution</strong></summary>
 
-| Vector | Fallback Payloads |
-|---|---|
-| `sql_injection` | `1' OR '1'='1`, `' UNION SELECT NULL--`, `admin'--` |
-| `auth_bypass` | `admin'--`, `' OR 1=1--`, `admin'#` |
-| `rce` | `; ls -la`, `| whoami`, `$(cat /etc/passwd)` |
-| `xss` | `<script>alert(1)</script>`, `<img src=x onerror=alert(1)>` |
-| `path_traversal` | `../../../etc/passwd`, URL-encoded variants |
-| `ssrf` | `http://169.254.169.254/latest/meta-data/` |
-| … and 8 more | Each with expected failure criteria |
+[`scripts/build.mjs`](scripts/build.mjs) · [`scripts/verify.mjs`](scripts/verify.mjs)
 
-### Phase 6 — Live Execution & Response Assertion
-
-**Modules:** [`src/engine/engine/runner.ts`](src/engine/engine/runner.ts) · [`src/engine/engine/assertion.ts`](src/engine/engine/assertion.ts)
-
-#### 6a — Parallel HTTP Runner (`src/engine/engine/runner.ts`)
-
-Executes the full `attack_suite` against your local dev server.
-
-- **Concurrency:** Up to 8 parallel requests via a worker-pool pattern.
-- **Timeout:** Strict **3-second limit** per payload — aborts if the server hangs.
-- **GET requests:** Payload data serialized into URL query strings via `URLSearchParams`.
-- **POST requests:** Dual content-type handling:
-  - `application/x-www-form-urlencoded` — default for traditional PHP/cPanel stacks.
-  - `application/json` — auto-detected when payload values contain JSON-like structures (`{...}` or `[...]`).
-- Captures first 2000 characters of each response body for signature scanning.
-- Records latency, status code, and response headers per request.
-
-#### 6b — Security Assertion Engine / The Judge (`src/engine/engine/assertion.ts`)
-
-Evaluates every HTTP response against three assertion categories. An endpoint is marked **VULNERABLE** if any assertion triggers:
-
-**1. Status Code Assertion:**
-- HTTP 500 Internal Server Error — unhandled exception triggered by payload.
-- HTTP 502 Bad Gateway — upstream service may have crashed.
-- HTTP 503 Service Unavailable — server may be overloaded.
-
-**2. Database Leak Assertion:**
-Scans response bodies with 25+ regex patterns for raw infrastructure errors:
-- MySQL/MariaDB: `You have an error in your SQL syntax`
-- PDO/PHP: `Fatal error: Uncaught PDOException`, `SQLSTATE[42000]`
-- PostgreSQL: `ERROR: syntax error at`, `pg_query()`
-- SQLite: `SQLITE_ERROR`, `SQLite3::`
-- Laravel: `Illuminate\Database\QueryException`
-- Django: `django.db.utils`, `DatabaseError`
-- Rails: `ActiveRecord::`, `PG::Error`
-- SQLAlchemy: `sqlalchemy.exc.`
-- Stack traces with file paths (`/var/www/`, `C:\xampp\`, `in /.../file.php on line 42`)
-
-**3. Auth Bypass Assertion:**
-An exploit targeting an auth or privilege endpoint returns HTTP 200 with privileged content instead of HTTP 401/403:
-- Admin panel keywords: `admin dashboard`, `welcome back, admin`
-- User data exposure: `username.*password`, `<table>` with user records
-- Session tokens: `access_token`, `session_id` in response
-- Database row dumps: `Array ([id] =>`, `{"id":..., "role":"admin"}`
-- Redirect to admin area: HTTP 302 with `Location: /admin/...`
-
-#### Test Result Display
-
-Each test result is shown with color-coded status:
-
-```
-✕ VULNERABLE  POST http://localhost:8000/api/login.php
-  Attack: sql_injection | HTTP 500 | 42ms
-  [database_leak] Response body contains raw database error — SQL syntax leak.
-
-✓ PASS        GET http://localhost:8000/api/users
-  HTTP 200 | 18ms
-
-! ERROR       POST http://localhost:8000/api/upload
-  Request timed out after 3s. (3012ms)
-```
-
-#### Combined Verdict
-
-The push passes only if **both** the LLM analysis (Phase 2) AND the live test run (Phase 6) report zero vulnerabilities. If either finds issues, the push is blocked:
-
-```
-✕  VibeGuard analysis FAILED — push blocked
-
-   LLM analysis detected high-severity vulnerability vectors.
-   Live tests confirmed 2 vulnerability/ies.
-
-   Review the findings above and fix the issues before pushing.
-```
-
-### Phase 7 — Self-Healing Patch Engine
-
-**Module:** [`src/engine/engine/healer.ts`](src/engine/engine/healer.ts)
-
-When live tests confirm a vulnerability, Phase 7 automatically generates a localized code fix — a security patch — for each vulnerable file. Patches are written to `.vibeguard/patches/` for the developer to review. **Patches are NEVER applied automatically** — you review and apply them manually.
-
-#### Pipeline Position
-
-```
-Phase 6 (Live Tests) → Phase 7 (Patch Generation) → Phase 4b (DB Restore) → Verdict
-```
-
-Phase 7 runs **before** database restore, so the exploit context (response signatures, stack traces) is still fresh for the LLM to analyze.
-
-#### Step 1 — Exploit Context Aggregation
-
-For each vulnerable test result, `buildExploitContext()` compiles a forensic profile:
-
-- **Source file path** — cross-referenced from the Phase 3 target map (`target_url` → `associated_file`)
-- **Raw source code** — read from disk (files up to 100KB; larger files are skipped with a warning)
-- **Attack payload data** — the exact parameters that breached the endpoint
-- **Response signature** — the triggered assertion category, matched DB error pattern, HTTP status, and response body excerpt (first 500 chars)
-- **Vulnerability type** — the attack vector that confirmed the breach
-
-#### Step 2 — Remediation Prompt
-
-The exploit context + complete source code is sent to the LLM with a **Hardened Systems Security Engineer** system prompt. The model is instructed to:
-
-1. Analyze WHY the exploit succeeded
-2. Produce a corrected version of the **entire source file**
-3. Follow vulnerability-specific remediation guidelines:
-
-| Vulnerability | Remediation Strategy |
-|---|---|
-| `sql_injection` | Replace string concatenation with parameterized queries / prepared statements |
-| `auth_bypass` / `privilege_escalation` | Add authorization checks, session validation, role verification |
-| `xss` | Escape output with context-appropriate encoding; avoid innerHTML |
-| `rce` / `command_injection` | Use argument arrays instead of shell strings; validate with allowlists |
-| `path_traversal` | Canonicalize paths; verify result stays within allowed root |
-| `ssrf` | Validate URLs against allowlists; block internal IP ranges |
-| `deserialization` | Use safe formats (JSON) with schema validation |
-| `input_fuzzing` / `misconfiguration` | Add input validation; enable security features |
-
-#### Step 3 — Response Parsing
-
-The LLM returns a JSON object:
-
-```json
-{
-  "remediation_applied": true,
-  "vulnerability_type": "sql_injection",
-  "explanation": "The login handler concatenated user input directly into a SQL query. Replaced with a parameterized statement using positional placeholders, which prevents the injected ' OR '1'='1 payload from altering query logic.",
-  "patched_code": "<?php\n// Full corrected file contents...\n?>"
-}
-```
-
-If the model cannot determine a fix, `remediation_applied` is `false` — this is better than guessing.
-
-#### Step 4 — Unified Diff Generation
-
-`generateUnifiedDiff()` implements an **LCS (Longest Common Subsequence)** based diff algorithm:
-
-1. Compute the LCS table between original and patched line arrays
-2. Backtrack through the table to produce an edit script (keep / insert / delete)
-3. Group edits into hunks with **3 lines of context** (standard unified diff format)
-4. Merge adjacent hunks that overlap in their context windows
-5. Format as standard `--- a/` / `+++ b/` / `@@` unified diff
-
-The diff is written to `.vibeguard/patches/<filename>.patch`.
-
-#### Step 5 — Patch File Output
-
-Each vulnerable file gets its own `.patch` file:
-
-```
-.vibeguard/patches/
-├── api_login.php.patch
-├── src_auth_middleware.ts.patch
-└── controllers_user_controller.py.patch
-```
-
-#### Terminal Display
-
-```
-── Self-Healing Patch Engine ──
-→  Generating patches for 2 confirmed vulnerability/ies...
-→  Requesting patch from llama3.1:8b for api/login.php (sql_injection)...
-
-✓  Patch: .vibeguard/patches/api_login.php.patch [sql_injection]
-   Replaced string concatenation with parameterized query using PDO prepared statements.
-
-✓  Patch: .vibeguard/patches/src_auth.ts.patch [auth_bypass]
-   Added session token validation before returning user data. Returns 401 for unauthenticated requests.
-
-   2 patch(es) written to .vibeguard/patches/
-   Review with: cat .vibeguard/patches/<file>.patch
-   Apply with: git apply .vibeguard/patches/<file>.patch
-```
-
-#### Reviewing and Applying Patches
-
-```bash
-# Review a patch before applying
-cat .vibeguard/patches/api_login.php.patch
-
-# Apply a single patch
-git apply .vibeguard/patches/api_login.php.patch
-
-# Apply all patches
-git apply .vibeguard/patches/*.patch
-
-# Check what a patch would change (dry run)
-git apply --stat .vibeguard/patches/api_login.php.patch
-```
-
-#### Failure Modes
-
-| Scenario | Behavior |
-|---|---|
-| No associated source file found for target URL | Patch skipped — error in results |
-| Source file too large (> 100KB) | Patch skipped — file too large |
-| LLM call fails / times out | Patch skipped — LLM error in results |
-| LLM returns `remediation_applied: false` | Patch skipped — model could not determine fix |
-| Patched code identical to original | Patch skipped — no changes needed |
-| Cannot write patch file to disk | Error reported, diff content still available in memory |
-
-All failures are non-blocking — the push is still blocked (vulnerabilities were found), but you'll need to fix the code manually if patches couldn't be generated.
-
-### Phase 8 — Minimalist UX & Terminal Output Engine
-
-**Module:** [`src/cli/ux.ts`](src/cli/ux.ts)
-
-Provides structured terminal reporting with high-contrast monochrome styling and CI-aware output mode switching.
-
-**Design Palette:**
-| Token | Color | Usage |
-|---|---|---|
-| White + Bold | Bright white | Headers, severity labels, primary actions |
-| Gray + Dim | Muted gray | File paths, metadata, dividers, secondary info |
-| Red | Red | Vulnerability warnings, blocked status, attack vectors |
-| Green | Green | Success confirmation, patches |
-| Yellow | Yellow | Warnings, matched signatures |
-| Cyan | Cyan | HTTP methods, URLs |
-
-**`renderFailureReport()`** — Full forensic display when push is blocked:
-- Blocked banner with bold header
-- Per-vulnerability threat cards: file path, endpoint URL, payload parameters (red), matched signature (yellow), verdict line (`VULNERABLE · HTTP 500 · 42ms`), assertion category
-- Per-vulnerability patch cards: green checkmark + patch path, word-wrapped explanation, review/apply commands
-- Actionable footer with bypass instructions
-
-**`renderSuccessReport()`** — Minimalist pass confirmation:
-```
-────────────────────────────────────────────────────────────
-  ✓  VibeGuard · All security checks passed · push allowed
-────────────────────────────────────────────────────────────
-```
-
-**Supporting primitives:**
-- `divider(label?)` — Full-width `─` rules with optional centered label
-- `renderKeyValueTable(rows)` — Right-aligned keys, left-aligned values
-- `renderPhaseHeader(phase, title)` — Labeled section divider
-- `renderAction()` / `renderSuccess()` / `renderFailure()` / `renderWarning()` / `renderInfo()` — Status line helpers
-
-**CI-Aware Output:** When running in CI/CD, the same functions automatically dispatch to machine-readable variants:
-- `renderFailureReportCI()` — `[VibeGuard]` prefixed log lines with full vulnerability breakdown for grep/archive
-- `renderSuccessReportCI()` — Single-line `[VibeGuard] PASS`
-- `writePlain()` — Strips all ANSI escape sequences for clean CI logs
-
-### Phase 9 — CI/CD Mirroring & Enterprise Configuration
-
-**Module:** [`src/compliance/ci.ts`](src/compliance/ci.ts) · Updates to [`src/core/config.ts`](src/core/config.ts) · [`src/core/hooks.ts`](src/core/hooks.ts) · [`src/cli/index.ts`](src/cli/index.ts)
-
-Enables environment-aware execution switching so VibeGuard works identically in local development and headless CI/CD pipelines.
-
-**`isHeadless()`** — Detects automation environments via 3 mechanisms:
-| Detection Method | Examples |
-|---|---|
-| **CI environment flags** (15 platforms) | `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `JENKINS_HOME`, `TRAVIS`, `CIRCLECI`, `TF_BUILD` (Azure), `BITBUCKET_BUILD_NUMBER`, `BUILDKITE`, `DRONE`, `CODEBUILD_BUILD_ID` (AWS), `SEMAPHORE`, `APPVEYOR`, `TEAMCITY_VERSION`, `BAMBOO_AGENT_HOME` |
-| **Enterprise override** | `VIBE_ENV=enterprise` — force headless mode anywhere |
-| **TTY detection** | `!process.stdin.isTTY` — piped input = headless |
-
-**`detectCIPlatform()`** — Identifies the specific CI provider for diagnostic logging.
-
-**`readConfigFromEnv()`** — Maps 14 environment variables to `VibeGuardConfig`:
-
-| Environment Variable | Config Field |
-|---|---|
-| `VIBE_LLM_PROVIDER` | `llm_provider` |
-| `VIBE_LLM_ENDPOINT` | `llm_api_endpoint` |
-| `VIBE_LLM_KEY` | `llm_api_key` |
-| `VIBE_LLM_MODEL` | `llm_model` |
-| `VIBE_TARGET_URL` | `target_local_url` |
-| `VIBE_EXCLUDE_PATHS` | `exclude_paths` (comma-separated) |
-| `VIBE_DB_TYPE` | `db_type` |
-| `VIBE_DB_HOST` | `db_host` |
-| `VIBE_DB_PORT` | `db_port` |
-| `VIBE_DB_USER` | `db_user` |
-| `VIBE_DB_PASS` | `db_pass` |
-| `VIBE_DB_NAME` | `db_name` |
-| `VIBE_DB_SQLITE_PATH` | `db_sqlite_path` |
-
-**`getOutputMode()`** — Returns `"ci"` or `"terminal"` for output dispatch.
-
-**Config Resolution Paths:** `readConfig()` now has 3 resolution strategies:
-1. **Headless CI** → skip filesystem, read from `VIBE_*` env vars, merge with defaults
-2. **Local + `.vibeguard.json`** → read and validate file (current behavior)
-3. **Local + no config file** → attempt env var fallback; throw actionable error if insufficient
-
-**CI-Specific Behavior:**
-| Feature | Local Mode | CI Mode |
-|---|---|---|
-| Hook installation | Writes to `.git/hooks/pre-push` | Skipped gracefully |
-| ANSI colors | Full monochrome palette | Stripped for clean logs |
-| Output format | Threat cards + patch cards | `[VibeGuard]` prefixed lines |
-| Phase 7 patches | Generated + displayed | Skipped (ephemeral containers) |
-| Interactive prompts | Init wizard active | Disabled |
-
-### Phase 10 — Open-Source Packaging & Distribution
-
-**Scripts:** [`scripts/build.mjs`](scripts/build.mjs) · [`scripts/verify.mjs`](scripts/verify.mjs)
-
-Production-grade packaging for global CLI installation, cross-platform distribution, and standalone native binary generation.
-
-**Production Build Pipeline (`npm run build:bundle`):**
-1. **Type-check** — Full `tsc --noEmit` verification
-2. **Bundle** — esbuild compiles all 18 source modules into a single minified CJS file (`dist/vibeguard.cjs`, ~97 KB)
-3. **Platform wrappers** — Unix shell script + Windows `.cmd` wrapper for universal execution
-4. **Native binaries** (optional) — Node.js SEA (Single Executable Application) generates standalone executables that embed the Node.js runtime
-
-**Cross-Platform Targets (`node scripts/build.mjs --native`):**
-| Platform | Architecture | Output |
-|---|---|---|
-| **Linux** | x86_64 | `dist/vibeguard-linux-x64` |
-| **Linux** | arm64 | `dist/vibeguard-linux-arm64` |
-| **macOS** | x86_64 (Intel) | `dist/vibeguard-macos-x64` |
-| **macOS** | arm64 (Apple Silicon) | `dist/vibeguard-macos-arm64` |
-| **Windows** | x86_64 | `dist/vibeguard-win-x64.exe` |
-
-**Global CLI Installation:**
-```bash
-# From npm (primary distribution)
-npm install -g vibeguard
-
-# From source
-git clone https://github.com/silentganja/VibeGuard.git
-cd VibeGuard
-npm install
-npm run build:all
-npm link
-```
-
-**Post-Install Verification (`npm run postinstall`):**
-- Validates Node.js ≥ 18
-- Checks entry point exists and is executable
-- Verifies Git is on the PATH
-- Confirms execute permissions on Unix systems
-- Never blocks installation — warnings only
-
-**Version Flag:**
-```bash
-vibeguard --version    # VibeGuard Engine v1.0.0 (2026)
-vibeguard -v           # Same output
-```
-
-**Bundle Size:** ~103 KB minified, zero external dependencies, Node 18+ compatible.
-
----
-
-## Phase 11 — Domain-Driven Architecture Refactoring
-
-**Module:** All 27 source files reorganized into 7 domain directories.
-
-Phase 11 restructured the flat `src/` directory into a professional, domain-driven architecture designed for open-source contribution. No logic was changed — all functions, types, and control flow are preserved exactly as they were.
-
-**Directory Structure:**
-
-| Directory | Responsibility | Files |
-|-----------|---------------|-------|
-| `src/cli/` | Entry points & UI | `index.ts`, `ui.ts`, `ux.ts` |
-| `src/core/` | Foundation & config | `index.ts`, `types.ts`, `config.ts`, `hooks.ts` |
-| `src/analyzer/` | Git & file parsing | `index.ts`, `git.ts`, `parser.ts`, `mapper.ts` |
-| `src/engine/` | Execution & security | `index.ts`, `runner.ts`, `assertion.ts`, `payloadGen.ts`, `healer.ts` |
-| `src/infrastructure/` | External connections | `index.ts`, `llm.ts`, `dbGuard.ts`, `checker.ts` |
-| `src/compliance/` | Validation & CI | `index.ts`, `ci.ts`, `compliance.ts` |
-| `src/utils/` | Shared utilities | `index.ts`, `diff.ts`, `http.ts`, `comment-stripper.ts` |
-
-**Utility Extraction:**
-
-Three files exceeded 200 lines and had separable utility code extracted:
-- [`src/engine/healer.ts`](src/engine/healer.ts) (865→594 lines): LCS unified diff generator → `src/utils/diff.ts`
-- [`src/engine/runner.ts`](src/engine/runner.ts) (414→294 lines): HTTP request builders → `src/utils/http.ts`
-- [`src/analyzer/parser.ts`](src/analyzer/parser.ts) (610→524 lines): Comment/noise stripping → `src/utils/comment-stripper.ts`
-
-**Barrel Exports:** Every directory has an `index.ts` that re-exports its public API. Contributors can import from a single entry point rather than hunting for individual files.
-
-**Dependency Flow (no cycles):**
-```
-cli → engine / analyzer / infrastructure / compliance → core → utils
-```
-
-**Git History:** All 18 file moves used `git mv` to preserve blame and commit history.
+4-stage build: type-check → esbuild bundle (single minified CJS, ~103 KB, Node 18+) → platform wrappers (Unix shell + Windows `.cmd`) → optional Node.js SEA native binaries (6 targets: linux/macos/win × x64/arm64). `postinstall` verification script (Node version, Git availability, entry point, execute permissions). `--version` / `-v` flag.
+</details>
 
 ---
 
 ## Pre-Push Hook Behavior
 
-When `vibeguard install` is run, it writes a script to `.git/hooks/pre-push`. On every `git push`:
+<details>
+<summary><strong>Hook flow</strong></summary>
 
-1. **Git passes pushed refs** to the hook via stdin (one line per ref: `local_ref local_sha remote_ref remote_sha`).
-2. **The hook parses** each ref to extract branch names.
-3. **The hook invokes** `vibeguard run --local <branch> --remote <branch> --sha <sha>` for each ref.
-4. **VibeGuard runs the full pipeline** (Phases 1–7 — compliance, diff, filter, LLM analysis, URL mapping, DB guard, payload generation, live test execution, response assertion, self-healing patch generation, DB restore).
-5. **If VibeGuard exits 0:** The push proceeds.
-6. **If VibeGuard exits 1:** The push is blocked. The developer sees the vulnerability report and must fix the issues.
-
-### Hook Platforms
-
-- **Linux / macOS / Git Bash (Windows):** The bash script runs natively.
-- **Windows PowerShell fallback:** A `pre-push.ps1` is also written for Windows-native Git installations.
-
-### Bypassing the Hook
-
-In an emergency, you can skip the hook:
-
-```bash
-git push --no-verify
-```
-
-> **⚠️ This bypasses all security analysis.** Only use this when you are certain the changes are safe and you cannot fix the blocking issue immediately.
-
-### Uninstalling
-
-```bash
-vibeguard uninstall
-```
-
-This removes the VibeGuard hook and restores any previous hook that was backed up during installation.
-
----
-
-## Pipeline Flow
-
-```
-Developer runs: git push
-        │
-        ▼
-┌─────────────────────────────────────────────┐
-│  .git/hooks/pre-push                        │
-│  Reads refs from stdin, invokes:            │
-│  vibeguard run --local main --remote origin │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────────────┐
-│  PHASE 5a — COMPLIANCE                      │
-│  compliance/compliance.ts                              │
-│  README check + commit message lint         │
-│  FAIL → exit 1 (abort immediately)          │
-└──────────────────┬──────────────────────────┘
-                   │
-    ┌──────────────┼──────────────┐
-    │              │              │
-    ▼              ▼              ▼
-┌────────┐  ┌────────────┐  ┌───────────────┐
-│ PHASE 1│  │ PHASE 2    │  │ PHASE 3       │
-│ git.ts │  │ parser.ts  │  │ infrastructure/checker.ts    │
-│        │  │ llm.ts     │  │ analyzer/mapper.ts     │
-│        │  │            │  │               │
-│ Extract│  │ Filter CSS │  │ HEAD → server │
-│ diff   │──▶│ Strip docs │──▶│ Resolve URLs  │
-│ from   │  │ Send to    │  │ Traditional   │
-│ remote │  │ your LLM   │  │ & Framework   │
-│        │  │ Parse JSON │  │ mapping       │
-│        │  │ Build      │  │               │
-│        │  │ verdict    │  │               │
-└────────┘  └────────────┘  └───────┬───────┘
-                                     │
-                          ┌──────────┘
-                          │
-         ┌────────────────┼────────────────┐
-         │                │                │
-         ▼                ▼                ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│ PHASE 4a     │  │ PHASE 5b     │  │ PHASE 6      │
-│ infrastructure/dbGuard.ts   │  │ engine/payloadGen.ts│  │ engine/runner.ts    │
-│              │  │              │  │ engine/assertion.ts │
-│ Snapshot DB  │──▶│ Generate     │──▶│ Fire HTTP    │
-│ (SQLite/     │  │ red-team     │  │ requests     │
-│  MySQL/PG)   │  │ payloads     │  │ (parallel,   │
-│              │  │ via LLM      │  │  3s timeout) │
-│              │  │ (+ fallback) │  │ Judge:       │
-│              │  │              │  │ status code, │
-│              │  │              │  │ DB leak,     │
-│              │  │              │  │ auth bypass  │
-└──────┬───────┘  └──────────────┘  └──────┬───────┘
-       │                                    │
-       │         ┌──────────────────────────┘
-       │         │
-       │         ▼
-       │  ┌─────────────────────┐
-       │  │ PHASE 7             │
-       │  │ engine/healer.ts           │
-       │  │                     │
-       │  │ For each vuln:      │
-       │  │ Read source file    │
-       │  │ Compile exploit ctx │
-       │  │ Call LLM as         │
-       │  │ Hardened Security   │
-       │  │ Engineer            │
-       │  │ Generate .patch     │
-       │  │ (NEVER auto-apply)  │
-       │  └──────────┬──────────┘
-       │             │
-       │             └──────────┐
-       │                        │
-       ▼                        ▼
-┌─────────────────────┐
-│ PHASE 4b + VERDICT  │
-│ infrastructure/dbGuard.ts          │
-│                     │
-│ Restore DB state    │
-│ Combined verdict:   │
-│ LLM pass + test     │
-│ pass → exit 0       │
-│ Any fail → exit 1   │
-│ Show patch paths    │
-└─────────────────────┘
-```
-
-**Fail-closed design:** Any error in the pipeline (LLM timeout, server unreachable, DB snapshot failure, patch generation failure) blocks the push and exits with code 1. VibeGuard defaults to safety. Patch generation failures are non-blocking but reported — vulnerabilities were still found.
+1. Git passes pushed refs to the hook via stdin (`local_ref local_sha remote_ref remote_sha`).
+2. Hook parses branch names and invokes `vibeguard run --local <branch> --remote <branch>`.
+3. VibeGuard runs the full pipeline (Phases 1–7).
+4. **Exit 0** → push proceeds. **Exit 1** → push blocked with forensic report.
+5. Bash hook for Linux/macOS/Git Bash; PowerShell fallback (`pre-push.ps1`) for Windows.
+6. Existing hooks are backed up as `.vibeguard.bak` before overwriting.
+</details>
 
 ---
 
@@ -1241,281 +389,114 @@ Developer runs: git push
 vibe-guard/
 ├── src/
 │   ├── cli/                   # Entry points & UI
-│   │   ├── index.ts           #   CLI entry point — argument parsing, command dispatch, full 10-phase pipeline orchestration
-│   │   ├── ui.ts              #   Low-level terminal UI — monochrome output primitives (muted, action, ok, fail, etc.)
-│   │   └── ux.ts              #   Terminal UX (ANSI styles, threat cards, patch cards, CI/terminal output dispatch)
+│   │   ├── index.ts           #   CLI entry — args, dispatch, 10-phase pipeline
+│   │   ├── ui.ts              #   Low-level terminal UI primitives
+│   │   └── ux.ts              #   Terminal UX — threat cards, patch cards, CI dispatch
 │   │
 │   ├── core/                  # Foundation & Configuration
-│   │   ├── index.ts           #   Barrel export — public API surface for the core module
-│   │   ├── types.ts           #   Shared type definitions — all interfaces, types, and constants for all 10 phases
-│   │   ├── config.ts          #   Configuration manager — read/write/validate .vibeguard.json, CI env-var fallback, init wizard
-│   │   └── hooks.ts           #   Git hook installer — cross-platform pre-push hook (bash + PowerShell)
+│   │   ├── index.ts           #   Barrel export
+│   │   ├── types.ts           #   All shared interfaces, types, and constants
+│   │   ├── config.ts          #   Config manager — .vibeguard.json, CI env-var fallback
+│   │   └── hooks.ts           #   Git hook installer — bash + PowerShell, CI-aware
 │   │
 │   ├── analyzer/              # Git & File Analysis
 │   │   ├── index.ts           #   Barrel export
-│   │   ├── git.ts             #   Phase 1 — Git diff extraction, remote resolution, unified diff parser
-│   │   ├── parser.ts          #   Phase 2a — Noise filter, file extension whitelist, token estimator
-│   │   └── analyzer/mapper.ts          #   Phase 3b — Dual-strategy route resolution (traditional & framework), TargetTargets builder
+│   │   ├── git.ts             #   Phase 1 — Diff extraction, unified diff parser
+│   │   ├── parser.ts          #   Phase 2a — Noise filter, comment stripper, token estimator
+│   │   └── mapper.ts          #   Phase 3b — Route resolution (traditional + framework)
 │   │
 │   ├── engine/                # Execution & Security
 │   │   ├── index.ts           #   Barrel export
-│   │   ├── engine/runner.ts          #   Phase 6a — Parallel HTTP execution engine (8 concurrent, 3s timeout)
-│   │   ├── engine/assertion.ts       #   Phase 6b — Security assertion engine (status code, DB leak, auth bypass — 25+ regex patterns)
-│   │   ├── engine/payloadGen.ts      #   Phase 5b — Red-team adversarial payload generation via LLM + deterministic fallback (70+ values)
-│   │   └── engine/healer.ts          #   Phase 7 — Self-Healing Patch Engine (exploit context, remediation LLM, .patch output)
+│   │   ├── runner.ts          #   Phase 6a — Parallel HTTP execution (8 concurrent, 3s timeout)
+│   │   ├── assertion.ts       #   Phase 6b — Security assertions (25+ regex patterns)
+│   │   ├── payloadGen.ts      #   Phase 5b — Red-team payload gen + deterministic fallback
+│   │   └── healer.ts          #   Phase 7 — Self-healing patch engine
 │   │
 │   ├── infrastructure/        # External Connections & State
 │   │   ├── index.ts           #   Barrel export
-│   │   ├── llm.ts             #   Phase 2b — LLM API client (OpenAI/Anthropic/custom), prompts, JSON parser, verdict builder
-│   │   ├── infrastructure/dbGuard.ts         #   Phase 4 — Database state guard (SQLite/MySQL/PostgreSQL), table discovery, capture/restore
-│   │   └── infrastructure/checker.ts         #   Phase 3a — Connectivity pre-flight check (1.5s timeout, HEAD→GET fallback)
+│   │   ├── llm.ts             #   Phase 2b — LLM client (OpenAI/Anthropic/custom)
+│   │   ├── dbGuard.ts         #   Phase 4 — DB guard (SQLite/MySQL/PostgreSQL)
+│   │   └── checker.ts         #   Phase 3a — Connectivity pre-flight check
 │   │
 │   ├── compliance/            # Validation & CI
 │   │   ├── index.ts           #   Barrel export
-│   │   ├── ci.ts              #   Phase 9 — CI detection (15 platforms), env-var→config mapping (14 vars), output mode switching
-│   │   └── compliance/compliance.ts      #   Phase 5a — Pre-push compliance checks (README validation + Conventional Commits enforcement)
+│   │   ├── ci.ts              #   Phase 9 — CI detection (15 platforms), env-var config
+│   │   └── compliance.ts      #   Phase 5a — README + commit message enforcement
 │   │
-│   └── utils/                 # Shared Utilities
+│   └── utils/                 # Shared Utilities (extracted per Phase 11)
 │       ├── index.ts           #   Barrel export
-│       ├── diff.ts            #   LCS-based unified diff generator (extracted from engine/healer.ts)
-│       ├── http.ts            #   HTTP request builders for GET/POST payload execution (extracted from engine/runner.ts)
-│       └── comment-stripper.ts #  Language-agnostic comment/noise detection and removal (extracted from parser.ts)
+│       ├── diff.ts            #   LCS-based unified diff generator
+│       ├── http.ts            #   HTTP request builders (GET/POST)
+│       └── comment-stripper.ts #  Language-agnostic comment detection & removal
 │
 ├── scripts/
-│   ├── build.mjs              # Phase 10 — Production build pipeline (esbuild bundle + Node.js SEA native binaries)
-│   └── verify.mjs             # Phase 10 — Post-install verification (Node version, Git, permissions)
+│   ├── build.mjs              # Production build (esbuild + optional SEA binaries)
+│   └── verify.mjs             # Post-install verification
 │
-├── dist/                      # Compiled JavaScript output (after `npm run build` or `npm run build:all`)
-│   ├── vibeguard.cjs          #   Production bundle — single minified file (~103 KB, zero deps)
-│   ├── vibeguard              #   Unix shell wrapper
-│   └── vibeguard.cmd          #   Windows .cmd wrapper
+├── dist/
+│   ├── vibeguard.cjs          #   Production bundle (~103 KB, zero deps)
+│   ├── vibeguard              #   Unix wrapper
+│   └── vibeguard.cmd          #   Windows wrapper
 │
-├── .vibeguard.json            # Project configuration (created by `vibeguard init` — .gitignore'd)
-├── package.json               # npm package manifest (zero runtime deps, esbuild as devDep)
-├── tsconfig.json              # TypeScript compiler configuration
-└── README.md                  # This file
+├── .vibeguard.json            # Project config (created by `vibeguard init`)
+├── package.json               # Zero runtime deps, esbuild + typescript as devDeps
+├── tsconfig.json
+└── README.md
 ```
 
-### Architectural Principles (Phase 11)
-
-The Phase 11 refactoring introduced a **domain-driven architecture** designed for open-source contribution:
-
-| Principle | Implementation |
-|-----------|---------------|
-| **Separation of Concerns** | 7 domain directories, each with a single responsibility |
-| **Barrel Exports** | Every directory has an `index.ts` exporting its public API — import from one path |
-| **Utility Extraction** | Files >200 lines had standalone utilities extracted to `src/utils/` |
-| **No Logic Changes** | All functions, types, and control flow are preserved exactly — only file locations changed |
-| **Zero Circular Dependencies** | Dependency flow: `cli` → `engine`/`analyzer`/`infrastructure`/`compliance` → `core` → `utils` |
-| **Git History Preserved** | All file moves used `git mv` to maintain blame and history |
+**Dependency flow (no cycles):** `cli` → `engine` / `analyzer` / `infrastructure` / `compliance` → `core` → `utils`
 
 ---
 
 ## Packaging & Distribution
 
-### npm (Primary)
-
 ```bash
-# Global install
-npm install -g vibeguard
-
-# Now `vibeguard` is on your PATH
-vibeguard --version   # VibeGuard Engine v1.0.0 (2026)
-```
-
-### From Source
-
-```bash
-git clone https://github.com/silentganja/VibeGuard.git
-cd VibeGuard
-npm install
-npm run build:all     # TypeScript + esbuild bundle
-npm link              # Symlink to global PATH
-```
-
-### Standalone Bundle
-
-The production bundle (`dist/vibeguard.cjs`) is a single 97 KB file with zero external dependencies:
-
-```bash
-# Make executable and run anywhere
-chmod +x dist/vibeguard.cjs
-./dist/vibeguard.cjs --version
-
-# Or use the platform wrapper
-./dist/vibeguard --version      # Unix
-dist\vibeguard.cmd --version    # Windows
-```
-
-### Native Binaries (Experimental)
-
-Generate standalone executables that embed the Node.js runtime:
-
-```bash
-# Requires Node.js ≥ 20 and postject
-npm install -g postject
-node scripts/build.mjs --native
-
-# Output in dist/:
-#   vibeguard-linux-x64      (~50 MB, self-contained)
-#   vibeguard-linux-arm64
-#   vibeguard-macos-x64
-#   vibeguard-macos-arm64
-#   vibeguard-win-x64.exe
-```
-
-### npm pack
-
-```bash
-npm run build:all
-npm pack                    # Creates vibeguard-1.0.0.tgz
+npm install -g .              # Global install from source
+npm pack                      # Create .tgz for distribution
+node scripts/build.mjs        # Bundle only (dist/vibeguard.cjs)
+node scripts/build.mjs --native  # Bundle + native binaries
 ```
 
 ---
 
 ## Troubleshooting
 
-### "LLM Request Timed Out"
+<details>
+<summary><strong>Common issues</strong></summary>
 
-```
-✕  LLM Request Timed Out
-   The configured LLM (llama3:8b) did not respond within the 6-second deadline.
-   This prevents VibeGuard from blocking your push indefinitely.
+**"Local development server at <url> is unreachable"**
+Your dev server isn't running. Start it before pushing. Verify `target_local_url` in `.vibeguard.json`.
 
-   Troubleshooting:
-   - Verify your LLM is running at the endpoint in .vibeguard.json
-   - Check llm_model in .vibeguard.json matches an available model
-   - For local models (Ollama/LM Studio), ensure the server is started
-```
+**"LLM request timed out after 6s"**
+Your LLM didn't respond in time. Check: is the LLM running? Is `llm_api_endpoint` correct? For local models (Ollama/LM Studio), ensure the server is started.
 
-**Fix:** Verify your LLM server is running. For Ollama: `ollama list`. For LM Studio: check the local server is started in the UI.
+**"LLM API returned 4xx"**
+Authentication or endpoint issue. Verify `llm_api_key` and `llm_api_endpoint`. For `$ENV_VAR` references, ensure the variable is set.
 
-### "Local development server is unreachable"
+**"No .vibeguard.json found" (local)**
+Run `vibeguard init` to create your config interactively.
 
-**Fix:**
-1. Start your local dev server (e.g., `php -S localhost:8000`, `npm run dev`, `go run .`).
-2. Verify `target_local_url` in `.vibeguard.json` matches the actual server URL.
-3. Check your firewall isn't blocking localhost connections.
+**"Missing required environment variables" (CI)**
+Set `VIBE_LLM_PROVIDER`, `VIBE_LLM_ENDPOINT`, `VIBE_LLM_KEY`, `VIBE_LLM_MODEL`, and `VIBE_TARGET_URL` in your CI pipeline.
 
-### "No .vibeguard.json found"
+**"No upstream tracking branch found"**
+Set the upstream: `git push --set-upstream origin <branch>`.
 
-Run `vibeguard init` inside your git repository to create the configuration file.
+**"Failed to parse LLM response as JSON"**
+The model returned non-JSON output. Try a different model. The built-in fallback handles this for payload generation.
 
-### "LLM response is missing modified_endpoints array"
+**"npm link" says "permission denied" (Linux/macOS)**
+Use `sudo npm link` or configure a user-level global prefix.
 
-Your LLM returned a response that doesn't match the required JSON schema. This can happen with very small models or models that don't support JSON mode. Try:
-- Using a model with better instruction-following (≥ 7B parameters recommended).
-- Verifying your LLM endpoint supports `response_format: { type: "json_object" }`.
-- Checking that the model has enough context window for the diff payload.
+**"VIBEGUARD_ENTRY is not defined" (Windows PowerShell hook)**
+Re-run `vibeguard install` to regenerate hooks with the current path.
 
-### "git diff failed"
-
-VibeGuard couldn't resolve the remote tracking branch. Ensure:
-- You have a remote configured: `git remote -v`
-- Your branch tracks a remote: `git branch -vv`
-- Set upstream if needed: `git push --set-upstream origin <branch>`
-
-### "Compliance Check Failed"
-
-VibeGuard blocks pushes that don't meet code quality standards.
-
-**README check failed:** Ensure `README.md` exists at the project root with substantive architectural documentation (≥ 200 chars, real content, not a stub/template). Update it to reflect the current codebase state.
-
-**Commit check failed:** Rewrite your commit message to follow Conventional Commits:
-```bash
-# Bad
-git commit -m "update"
-
-# Good
-git commit -m "feat: add user authentication endpoint with JWT session tokens"
-```
-
-Valid prefixes: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `revert:`, `security:`
-
-### "Payload generation failed" or "LLM generated 0 payloads"
-
-The LLM could not generate payloads — this is most often caused by a **filtered/safety-aligned model** refusing to create exploit strings. VibeGuard automatically falls back to deterministic payload generation using a built-in library of 70+ attack values. The fallback payloads cover all 14 vulnerability vectors. You'll see `fallbackCount` in the payload generation summary — these are perfectly valid for testing.
-
-For context-aware payloads (where the LLM knows your endpoint expects `user_uuid` and crafts an injection specific to that field), use an unfiltered model. See [Model Requirements](#model-requirements).
-
-### "LLM generated 0 payloads — all fallback"
-
-Your LLM may be a filtered/safety-aligned model that refuses to generate exploit payloads. VibeGuard automatically falls back to a built-in library of 70+ attack values — these work, but lack context-awareness.
-
-**Fix:** Use an unfiltered local model for full adversarial coverage. See [Model Requirements](#model-requirements) for recommendations.
-
-```bash
-# Install Ollama and an unfiltered model
-ollama pull llama3.1:8b
-```
-
-Then update `.vibeguard.json`:
-```json
-{
-  "llm_provider": "custom",
-  "llm_api_endpoint": "http://localhost:11434/v1",
-  "llm_api_key": "ollama",
-  "llm_model": "llama3.1:8b"
-}
-```
-
-### "No patches generated" or "LLM could not determine a fix"
-
-The self-healing patch engine (Phase 7) couldn't generate a fix. This can happen when:
-
-- **Filtered model refused:** Safety-aligned models may refuse to analyze vulnerable code or output modified versions. Use an unfiltered model for patch generation.
-- **Source file not found:** The vulnerable endpoint's source file couldn't be located from the target URL mapping. Check that the endpoint file from Phase 3 actually exists on disk.
-- **File too large:** Source files over 100KB are skipped to avoid overwhelming the LLM's context window.
-- **LLM returned `remediation_applied: false`:** The model couldn't determine a safe fix — this is better than guessing incorrectly.
-
-**Fix:** Review the patch results in the terminal output. Each failure includes a specific error message. For manual remediation, review the vulnerability details shown in the Phase 6 results and apply the appropriate fix based on the vulnerability type.
-
-### "Missing required environment variables" in CI/CD
-
-VibeGuard couldn't find the required `VIBE_*` environment variables in your CI pipeline.
-
-**Fix:** Set these minimum variables in your CI configuration:
-```bash
-VIBE_LLM_PROVIDER=custom
-VIBE_LLM_ENDPOINT=http://your-llm:11434/v1
-VIBE_LLM_KEY=your-api-key
-VIBE_LLM_MODEL=llama3.1:8b
-VIBE_TARGET_URL=http://localhost:8000
-```
-
-Store secrets (`VIBE_LLM_KEY`, `VIBE_LLM_ENDPOINT`) in your CI provider's encrypted secret store — never hardcode them in pipeline YAML.
-
-### "Skipping hook installation — running in CI" is expected
-
-This is normal. In CI/CD environments, VibeGuard detects the automation platform and skips `.git/hooks` manipulation. The engine runs directly via `vibeguard run` — hooks are only for local development.
-
-### "No patches generated" in CI
-
-Phase 7 (self-healing patches) is skipped in CI mode — ephemeral build containers have no use for local `.patch` files. The vulnerability breakdown is still output as machine-readable text. Apply fixes locally after reviewing the CI logs.
-
-### Database tools not found
-
-For MySQL state guarding: `mysqldump` and `mysql` must be on your PATH.
-For PostgreSQL state guarding: `pg_dump` and `psql` must be on your PATH.
-
-```bash
-# Verify MySQL tools
-which mysqldump mysql
-
-# Verify PostgreSQL tools
-which pg_dump psql
-```
-
-If they're not found, install them or add their directory to your PATH. Set `db_type` to `"none"` if you don't need database guarding.
+**Push blocked but I want to bypass**
+`git push --no-verify` (not recommended — the vulnerabilities are real).
+</details>
 
 ---
 
 ## License
 
-MIT
-
----
-
-**v1.0.0** · 10-phase adversarial QA engine · 18 source modules · ~97 KB production bundle · Zero runtime dependencies.
-
-Runs anywhere: local dev terminals, GitHub Actions, GitLab CI, Jenkins, CircleCI, or any headless environment — with or without `.vibeguard.json`. Uses your own LLM — no data ever leaves your machine unless you configure a cloud provider.
+MIT — see [package.json](package.json).
