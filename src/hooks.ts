@@ -16,6 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { findProjectRoot } from "./config";
+import { isHeadless, detectCIPlatform } from "./ci";
 import * as ui from "./ui";
 
 // ─── Hook Script (Bash) ──────────────────────────────────────────────────────
@@ -150,6 +151,16 @@ function generatePowerShellHook(vibeguardEntry: string): string {
  *   4. On Windows: also write `pre-push.ps1` as a PowerShell fallback.
  */
 export function installHook(): void {
+  // In headless CI/CD environments, skip hook installation gracefully.
+  // Git hooks are a local development feature — they have no meaning in
+  // ephemeral CI build containers where .git may not even exist.
+  if (isHeadless()) {
+    const platform = detectCIPlatform() ?? "headless environment";
+    ui.muted("Skipping hook installation — running in " + platform + ".");
+    ui.muted("VibeGuard is invoked directly via `vibeguard run` in CI pipelines.");
+    return;
+  }
+
   const projectRoot = findProjectRoot();
   if (!projectRoot) {
     ui.fail("No .git directory found. Are you inside a git repository?");
@@ -222,6 +233,12 @@ export function installHook(): void {
 
 /** Remove the VibeGuard pre-push hook. Restore backup if one exists. */
 export function uninstallHook(): void {
+  // In headless CI/CD environments, there are no hooks to uninstall.
+  if (isHeadless()) {
+    ui.muted("Hook uninstall skipped — running in headless/CI environment.");
+    return;
+  }
+
   const projectRoot = findProjectRoot();
   if (!projectRoot) {
     ui.fail("No .git directory found.");

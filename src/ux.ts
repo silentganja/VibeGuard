@@ -30,6 +30,7 @@ import type {
   PatchResult,
   VulnerabilityVector,
 } from "./types";
+import { getOutputMode, detectCIPlatform } from "./ci";
 
 // ─── ANSI Style Constants ──────────────────────────────────────────────────────
 
@@ -68,6 +69,12 @@ export function renderFailureReport(
   patchResults: PatchResult[],
   analysisPassed: boolean
 ): void {
+  // Dispatch to CI or terminal variant based on output mode.
+  if (getOutputMode() === "ci") {
+    renderFailureReportCI(verdict, testReport, patchResults, analysisPassed);
+    return;
+  }
+
   const vulnerableResults = testReport.results.filter((r) => r.vulnerable);
   const successPatches = patchResults.filter((p) => p.success);
 
@@ -168,6 +175,12 @@ export function renderFailureReport(
  * native git push stream.
  */
 export function renderSuccessReport(): void {
+  // Dispatch to CI or terminal variant based on output mode.
+  if (getOutputMode() === "ci") {
+    renderSuccessReportCI();
+    return;
+  }
+
   write("");
   write(
     BOLD + WHITE + divider() + R
@@ -181,6 +194,131 @@ export function renderSuccessReport(): void {
     BOLD + WHITE + divider() + R
   );
   write("");
+}
+
+// ─── CI/CD Machine-Readable Reports ────────────────────────────────────────────
+
+/**
+ * Render a machine-readable failure report for CI/CD pipeline logs.
+ *
+ * Outputs a clean, parseable text breakdown of every vulnerability.
+ * No ANSI colors, no box drawing — plain text suitable for log archival,
+ * grep filtering, and CI pipeline log viewers.
+ *
+ * Format:
+ *   [VibeGuard] PUSH BLOCKED — 2 vulnerability/ies confirmed
+ *   [VibeGuard] Platform: GitHub Actions
+ *   [VibeGuard]
+ *   [VibeGuard] THREAT 1/2 | sql_injection | HIGH
+ *   [VibeGuard]   URL:    POST http://localhost:8000/api/login.php
+ *   [VibeGuard]   Payload: username=admin' OR '1'='1
+ *   [VibeGuard]   Payload: password=anything' OR 1=1--
+ *   [VibeGuard]   Signature: You have an error in your SQL syntax...
+ *   [VibeGuard]   Status:  500 | 42ms
+ *   [VibeGuard]
+ *   [VibeGuard] RESULT: 2 vulnerability/ies found — build failed
+ */
+function renderFailureReportCI(
+  verdict: AnalysisVerdict,
+  testReport: TestReport,
+  patchResults: PatchResult[],
+  analysisPassed: boolean
+): void {
+  const vulnerableResults = testReport.results.filter((r) => r.vulnerable);
+  const platform = detectCIPlatform() ?? "CI/CD";
+  const successPatches = patchResults.filter((p) => p.success);
+
+  // ── Header ──────────────────────────────────────────────────────────
+  writePlain("[VibeGuard] PUSH BLOCKED — " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies confirmed");
+  writePlain("[VibeGuard] Platform: " + platform);
+  writePlain("[VibeGuard]");
+
+  if (!analysisPassed) {
+    writePlain("[VibeGuard] LLM Analysis: High-severity vulnerability vectors detected.");
+  }
+
+  writePlain("[VibeGuard] Live Tests: " + String(testReport.vulnerabilitiesFound) + " payload(s) confirmed exploitable.");
+  writePlain("[VibeGuard]");
+
+  // ── Threat Cards ────────────────────────────────────────────────────
+  for (let i = 0; i < vulnerableResults.length; i++) {
+    const vr = vulnerableResults[i];
+    const severity = vectorSeverityLabel(vr.payload.attack_type);
+    const triggered = vr.assertions.find((a) => a.triggered);
+
+    writePlain(
+      "[VibeGuard] THREAT " + String(i + 1) + "/" +
+      String(vulnerableResults.length) + " | " +
+      vr.payload.attack_type + " | " + severity
+    );
+    writePlain("[VibeGuard]   URL:       " + vr.payload.method + " " + vr.payload.target_url);
+
+    // Payload data.
+    for (const [key, value] of Object.entries(vr.payload.payload_data)) {
+      const truncated = value.length > 100 ? value.slice(0, 97) + "..." : value;
+      writePlain("[VibeGuard]   Payload:   " + key + "=" + truncated);
+    }
+
+    // Signature.
+    if (triggered && triggered.matched_signature) {
+      const sig = triggered.matched_signature.length > 120
+        ? triggered.matched_signature.slice(0, 117) + "..."
+        : triggered.matched_signature;
+      writePlain("[VibeGuard]   Signature: " + sig);
+    } else if (triggered) {
+      const detail = triggered.detail.length > 120
+        ? triggered.detail.slice(0, 117) + "..."
+        : triggered.detail;
+      writePlain("[VibeGuard]   Signature: " + detail);
+    }
+
+    // Status.
+    const statusCode = vr.statusCode !== null ? String(vr.statusCode) : "N/A";
+    writePlain("[VibeGuard]   Status:    " + statusCode + " | " + String(vr.latencyMs) + "ms");
+
+    // Category.
+    if (triggered && triggered.category !== "none") {
+      writePlain("[VibeGuard]   Category:  " + triggered.category);
+    }
+
+    // Associated patch.
+    const associatedPatch = successPatches.find(
+      (p) => p.vulnerabilityType === vr.payload.attack_type
+    );
+    if (associatedPatch) {
+      writePlain("[VibeGuard]   Patch:     " + (associatedPatch.patchPath ?? "N/A"));
+      if (associatedPatch.explanation) {
+        const expl = associatedPatch.explanation.length > 150
+          ? associatedPatch.explanation.slice(0, 147) + "..."
+          : associatedPatch.explanation;
+        writePlain("[VibeGuard]   Fix:       " + expl);
+      }
+    }
+
+    writePlain("[VibeGuard]");
+  }
+
+  // ── Patch Summary ───────────────────────────────────────────────────
+  if (successPatches.length > 0) {
+    writePlain("[VibeGuard] PATCHES: " + String(successPatches.length) + " generated in .vibeguard/patches/");
+    for (const p of successPatches) {
+      writePlain("[VibeGuard]   " + (p.patchPath ?? "unknown"));
+    }
+    writePlain("[VibeGuard]");
+  }
+
+  // ── Result ──────────────────────────────────────────────────────────
+  writePlain("[VibeGuard] RESULT: " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies found — build failed");
+  writePlain("[VibeGuard] " + String(testReport.testsPassed) + " passed | " + String(testReport.testsErrored) + " errored | " + String(testReport.vulnerabilitiesFound) + " vulnerable");
+}
+
+/**
+ * Render a machine-readable success message for CI/CD pipeline logs.
+ *
+ * Minimal — one line confirming the security scan passed.
+ */
+function renderSuccessReportCI(): void {
+  writePlain("[VibeGuard] PASS — All security checks passed.");
 }
 
 // ─── Threat Card ───────────────────────────────────────────────────────────────
@@ -494,4 +632,14 @@ function vectorSeverityLabel(v: VulnerabilityVector): string {
  */
 function write(line: string): void {
   process.stdout.write(line + "\n");
+}
+
+/**
+ * Write a plain text line to stdout with no ANSI codes.
+ * Used for CI/CD machine-readable output.
+ */
+function writePlain(line: string): void {
+  // Strip any ANSI escape sequences that might have leaked through.
+  const clean = line.replace(/\x1b\[[0-9;]*m/g, "");
+  process.stdout.write(clean + "\n");
 }

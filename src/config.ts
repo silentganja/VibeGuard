@@ -14,6 +14,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import type { VibeGuardConfig, RawConfig, DbConnectionConfig } from "./types";
+import { isHeadless, detectCIPlatform, readConfigFromEnv, getMissingEnvConfigFields, ENV_KEYS } from "./ci";
 import * as ui from "./ui";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -167,33 +168,100 @@ export function validateConfig(raw: Partial<VibeGuardConfig>): string[] {
 
 /**
  * Read and validate the config from the project root.
+ *
+ * Strategy:
+ *   1. If running headless (CI/CD) → skip filesystem config, read from env vars.
+ *   2. If .vibeguard.json exists → read and validate it (local dev mode).
+ *   3. If .vibeguard.json is missing BUT env vars are set → use env vars.
+ *   4. If neither exists → throw with actionable error message.
+ *
  * Throws with a user-facing message if anything is wrong.
  */
 export function readConfig(root?: string): VibeGuardConfig {
-  const projectRoot = root ?? findProjectRoot();
-  if (!projectRoot) {
-    throw new Error(
-      "No .git directory found. Run `vibeguard init` inside a git repository."
-    );
-  }
+  const headless = isHeadless();
 
-  const filePath = configPath(projectRoot);
-  let raw: unknown;
+  // ── Path 1: Headless CI/CD — use environment variables ──────────────
+  if (headless) {
+    const envConfig = readConfigFromEnv();
 
-  try {
-    const contents = fs.readFileSync(filePath, "utf-8");
-    raw = JSON.parse(contents);
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(
-        `No ${CONFIG_FILENAME} found. Run \`vibeguard init\` first.`
-      );
+    // Merge with defaults for any missing fields.
+    const merged = { ...DEFAULT_CONFIG, ...envConfig };
+
+    const errors = validateConfig(merged);
+    if (errors.length > 0) {
+      const missingFields = getMissingEnvConfigFields();
+      const platform = detectCIPlatform() ?? "CI/CD";
+
+      let msg = `Invalid or missing ${platform} environment configuration:\n`;
+      msg += `  ${errors.join("\n  ")}`;
+
+      if (missingFields.length > 0) {
+        msg += `\n\nMissing required environment variables:\n`;
+        for (const field of missingFields) {
+          msg += `  · ${field}\n`;
+        }
+        msg += `\nSet these variables in your CI pipeline configuration.`;
+      }
+
+      throw new Error(msg);
     }
+
+    return merged as VibeGuardConfig;
+  }
+
+  // ── Path 2 & 3: Local — try filesystem config ──────────────────────
+  const projectRoot = root ?? findProjectRoot();
+
+  const filePath = projectRoot
+    ? path.join(projectRoot, CONFIG_FILENAME)
+    : CONFIG_FILENAME;
+
+  let raw: unknown;
+  let fileExists = false;
+
+  if (projectRoot) {
+    try {
+      const contents = fs.readFileSync(filePath, "utf-8");
+      raw = JSON.parse(contents);
+      fileExists = true;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new Error(
+          `Failed to read ${CONFIG_FILENAME}: ${(err as Error).message}`
+        );
+      }
+      // ENOENT — file doesn't exist. Fall through to env var check.
+    }
+  }
+
+  // ── Path 3: No config file — try env vars as fallback ─────────────
+  if (!fileExists) {
+    const envConfig = readConfigFromEnv();
+
+    // If env vars provide the critical fields, use them.
+    if (envConfig.llm_provider && envConfig.llm_api_endpoint &&
+        envConfig.llm_api_key && envConfig.llm_model &&
+        envConfig.target_local_url) {
+
+      const merged = { ...DEFAULT_CONFIG, ...envConfig };
+      const errors = validateConfig(merged);
+      if (errors.length > 0) {
+        throw new Error(
+          `Invalid environment configuration:\n  ${errors.join("\n  ")}`
+        );
+      }
+
+      return merged as VibeGuardConfig;
+    }
+
+    // No config file and insufficient env vars — cannot proceed.
     throw new Error(
-      `Failed to read ${CONFIG_FILENAME}: ${(err as Error).message}`
+      `No ${CONFIG_FILENAME} found and no ${ENV_KEYS.LLM_PROVIDER}/${ENV_KEYS.LLM_ENDPOINT}/${ENV_KEYS.LLM_KEY}/${ENV_KEYS.LLM_MODEL}/${ENV_KEYS.TARGET_URL} environment variables set.\n` +
+      `Run \`vibeguard init\` to create a config file, or set the VIBE_* environment variables for CI/CD usage.`
     );
   }
 
+  // ── Path 2: Config file exists — validate and return ───────────────
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new Error(`${CONFIG_FILENAME} must contain a JSON object.`);
   }

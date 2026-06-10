@@ -23,7 +23,7 @@ import type { VibeGuardConfig, ServerCheckResult } from "./types";
 const CHECK_TIMEOUT_MS = 1500;
 
 /** HTTP user-agent string sent with the probe request. */
-const USER_AGENT = "VibeGuard/0.8.0 (pre-push connectivity check)";
+const USER_AGENT = "VibeGuard/0.9.0 (pre-push connectivity check)";
 
 // ─── Public API ─────────────────────────────────────────────────────────────────
 

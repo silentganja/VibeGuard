@@ -28,6 +28,7 @@ import { generatePayloads } from "./payloadGen";
 import { runTests } from "./runner";
 import { generateAllPatches, formatPatchSummary } from "./healer";
 import { renderFailureReport, renderSuccessReport, renderPhaseHeader } from "./ux";
+import { isHeadless, getOutputMode } from "./ci";
 import type { RunArgs, TargetTargets, TestReport, PatchResult } from "./types";
 
 // ─── Help Text ───────────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ ${"\x1b[90m"}Examples:${"\x1b[0m"}
   vibeguard install
   vibeguard config
 
-${"\x1b[90m"}Phase 8 · v0.8.0${"\x1b[0m"}
+${"\x1b[90m"}Phase 9 · v0.9.0${"\x1b[0m"}
 `;
 
 // ─── Argument Parser (zero-dependency) ───────────────────────────────────────
@@ -482,9 +483,13 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
     // When tests confirm vulnerabilities, call the LLM to generate
     // localized code fixes. Patches are written to .vibeguard/patches/
     // for the developer to review — they are NEVER applied automatically.
+    //
+    // In CI/CD mode, patch generation is skipped: ephemeral build containers
+    // have no use for local .patch files. The vulnerability breakdown is
+    // still output as machine-readable text for log archival.
     let patchResults: PatchResult[] = [];
 
-    if (!testReport.overallPass && testReport.vulnerabilitiesFound > 0) {
+    if (!isHeadless() && !testReport.overallPass && testReport.vulnerabilitiesFound > 0) {
       ui.space();
       ui.header("Self-Healing Patch Engine");
       ui.action(
