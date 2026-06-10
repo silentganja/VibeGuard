@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 /**
  * VibeGuard Â· CLI Entry Point
  *
@@ -29,12 +29,13 @@ import { runTests } from "../engine/runner";
 import { generateAllPatches, formatPatchSummary } from "../engine/healer";
 import { renderFailureReport, renderSuccessReport, renderPhaseHeader } from "./ux";
 import { isHeadless, getOutputMode } from "../compliance/ci";
+import { dispatchAlert, buildReport } from "../infrastructure/webhooks";
 import type { RunArgs, TargetTargets, TestReport, PatchResult } from "../core/types";
 
 // â”€â”€â”€ Version & Build Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const VERSION = "VibeGuard Engine v1.0.0 (2026)";
-const BUILD_TAG = "Phase 10 Â· Production Release";
+const BUILD_TAG = "Phase 13 Â· Notification Engine";
 
 // â”€â”€â”€ Help Text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -529,6 +530,34 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
         ui.muted("  No patches generated â€” no associated source files found for vulnerable endpoints.");
       }
       ui.rule();
+    }
+
+
+    // Phase 13: CI/CD Webhook Notification
+    // Fire vulnerability alerts to Slack/Discord/Teams before DB restore.
+    // Only in headless CI mode; best-effort — failures never block the push.
+    if (isHeadless() && !testReport.overallPass && testReport.vulnerabilitiesFound > 0) {
+      const projectName = projectRoot.split(/[\\/\\\\]/).pop() ?? "unknown";
+      const report = buildReport(testReport, local, projectName ?? "unknown");
+      const webhookConfig = config;
+
+      // Race webhook dispatch against a 2s deadline — never block exit.
+      try {
+        await Promise.race([
+          dispatchAlert(
+            report,
+            webhookConfig.webhook_slack,
+            webhookConfig.webhook_discord,
+            webhookConfig.webhook_teams
+          ),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error("Webhook dispatch deadline exceeded")), 2500)
+          ),
+        ]);
+      } catch {
+        // Webhook timed out — non-blocking, push already blocked.
+        ui.muted("  Webhook dispatch skipped (timeout or delivery failure).");
+      }
     }
 
     // â•â•â• Phase 4b: DB State Restore â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•

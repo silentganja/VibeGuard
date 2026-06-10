@@ -156,6 +156,9 @@ const ENV_DB_USER = "VIBE_DB_USER";
 const ENV_DB_PASS = "VIBE_DB_PASS";
 const ENV_DB_NAME = "VIBE_DB_NAME";
 const ENV_DB_SQLITE_PATH = "VIBE_DB_SQLITE_PATH";
+const ENV_WEBHOOK_SLACK = "VIBE_WEBHOOK_SLACK";
+const ENV_WEBHOOK_DISCORD = "VIBE_WEBHOOK_DISCORD";
+const ENV_WEBHOOK_TEAMS = "VIBE_WEBHOOK_TEAMS";
 
 /** Valid LLM provider values. */
 const VALID_PROVIDERS = new Set<string>(["custom", "openai", "anthropic"]);
@@ -262,6 +265,20 @@ export function readConfigFromEnv(): Partial<VibeGuardConfig> {
   const dbSqlitePath = process.env[ENV_DB_SQLITE_PATH];
   if (dbSqlitePath) {
     config.db_sqlite_path = dbSqlitePath;
+
+  // Phase 13: Webhook URLs
+  const webhookSlack = process.env[ENV_WEBHOOK_SLACK];
+  if (webhookSlack) {
+    config.webhook_slack = webhookSlack;
+  }
+  const webhookDiscord = process.env[ENV_WEBHOOK_DISCORD];
+  if (webhookDiscord) {
+    config.webhook_discord = webhookDiscord;
+  }
+  const webhookTeams = process.env[ENV_WEBHOOK_TEAMS];
+  if (webhookTeams) {
+    config.webhook_teams = webhookTeams;
+  }
   }
 
   return config;
@@ -307,4 +324,7 @@ export const ENV_KEYS = {
   DB_PASS: ENV_DB_PASS,
   DB_NAME: ENV_DB_NAME,
   DB_SQLITE_PATH: ENV_DB_SQLITE_PATH,
+  WEBHOOK_SLACK: ENV_WEBHOOK_SLACK,
+  WEBHOOK_DISCORD: ENV_WEBHOOK_DISCORD,
+  WEBHOOK_TEAMS: ENV_WEBHOOK_TEAMS,
 } as const;

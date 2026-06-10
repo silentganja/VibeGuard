@@ -61,6 +61,17 @@ export interface VibeGuardConfig {
 
   /** Enable diff-hash-based response caching to skip redundant LLM calls. Default: true. */
   llm_cache_enabled?: boolean;
+
+  // ── Phase 13: Webhook Notification Engine ────────────────────────────
+
+  /** Slack incoming webhook URL for CI/CD vulnerability alerts. */
+  webhook_slack?: string;
+
+  /** Discord incoming webhook URL for CI/CD vulnerability alerts. */
+  webhook_discord?: string;
+
+  /** Microsoft Teams incoming webhook URL for CI/CD vulnerability alerts. */
+  webhook_teams?: string;
 }
 
 /** Shape of the raw JSON on disk before validation. */

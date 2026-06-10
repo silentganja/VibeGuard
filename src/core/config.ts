@@ -41,6 +41,10 @@ const DEFAULT_CONFIG: VibeGuardConfig = {
   // Phase 12 defaults
   llm_max_retries: 3,
   llm_cache_enabled: true,
+  // Phase 13 defaults
+  webhook_slack: "",
+  webhook_discord: "",
+  webhook_teams: "",
 };
 
 // â”€â”€â”€ Project Root Discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -175,6 +179,17 @@ export function validateConfig(raw: Partial<VibeGuardConfig>): string[] {
     if (typeof raw.llm_cache_enabled !== "boolean") {
       errors.push("llm_cache_enabled must be a boolean (true or false)");
     }
+  }
+
+  // Phase 13: Webhook URL validation (all fields optional)
+  if (raw.webhook_slack !== undefined && typeof raw.webhook_slack !== "string") {
+    errors.push("webhook_slack must be a URL string");
+  }
+  if (raw.webhook_discord !== undefined && typeof raw.webhook_discord !== "string") {
+    errors.push("webhook_discord must be a URL string");
+  }
+  if (raw.webhook_teams !== undefined && typeof raw.webhook_teams !== "string") {
+    errors.push("webhook_teams must be a URL string");
   }
 
   return errors;
