@@ -40,7 +40,7 @@ const REQUEST_TIMEOUT_MS = 3_000;
 const MAX_RESPONSE_BODY_CHARS = 2_000;
 
 /** User-agent sent with test requests. */
-const USER_AGENT = "VibeGuard/0.7.0 (adversarial-payload-test)";
+const USER_AGENT = "VibeGuard/0.8.0 (adversarial-payload-test)";
 
 // ─── Public API ─────────────────────────────────────────────────────────────────
 

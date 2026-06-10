@@ -27,6 +27,7 @@ import { enforce as enforceCompliance } from "./compliance";
 import { generatePayloads } from "./payloadGen";
 import { runTests } from "./runner";
 import { generateAllPatches, formatPatchSummary } from "./healer";
+import { renderFailureReport, renderSuccessReport, renderPhaseHeader } from "./ux";
 import type { RunArgs, TargetTargets, TestReport, PatchResult } from "./types";
 
 // ─── Help Text ───────────────────────────────────────────────────────────────
@@ -49,7 +50,7 @@ ${"\x1b[90m"}Examples:${"\x1b[0m"}
   vibeguard install
   vibeguard config
 
-${"\x1b[90m"}Phase 7 · v0.7.0${"\x1b[0m"}
+${"\x1b[90m"}Phase 8 · v0.8.0${"\x1b[0m"}
 `;
 
 // ─── Argument Parser (zero-dependency) ───────────────────────────────────────
@@ -494,34 +495,20 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
       const projectRoot = findProjectRoot() ?? process.cwd();
       patchResults = await generateAllPatches(config, testReport, targets, projectRoot);
 
-      // Display patch results.
+      // Display patch generation summary (details deferred to final report).
       ui.space();
       if (patchResults.length > 0) {
-        for (const pr of patchResults) {
-          if (pr.success) {
-            ui.ok(
-              "Patch: " + (pr.patchPath ?? "unknown") +
-              " [" + (pr.vulnerabilityType ?? "unknown") + "]"
-            );
-            if (pr.explanation) {
-              ui.muted("  " + pr.explanation.slice(0, 200));
-            }
-          } else {
-            ui.warn(
-              "No patch for " + (pr.vulnerabilityType ?? "unknown") +
-              " — " + (pr.error ?? "Unknown error")
-            );
-          }
-        }
-
         const successCount = patchResults.filter((p) => p.success).length;
+        const failCount = patchResults.length - successCount;
         if (successCount > 0) {
-          ui.space();
-          ui.muted(
-            String(successCount) + " patch(es) written to .vibeguard/patches/"
+          ui.ok(
+            String(successCount) + " patch(es) generated → .vibeguard/patches/"
           );
-          ui.muted("Review with: cat .vibeguard/patches/<file>.patch");
-          ui.muted("Apply with: git apply .vibeguard/patches/<file>.patch");
+        }
+        if (failCount > 0) {
+          ui.warn(
+            String(failCount) + " endpoint(s) could not be patched (see report below)"
+          );
         }
       } else {
         ui.muted("  No patches generated — no associated source files found for vulnerable endpoints.");
@@ -559,41 +546,10 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
     const finalPass = analysisPassed && testsPassed;
 
     if (finalPass) {
-      ui.ok("VibeGuard analysis passed - push allowed");
+      renderSuccessReport();
       process.exit(0);
     } else {
-      ui.space();
-      ui.fail("VibeGuard analysis FAILED — push blocked");
-      ui.muted("");
-
-      if (!analysisPassed) {
-        ui.muted("  LLM analysis detected high-severity vulnerability vectors.");
-      }
-      if (!testsPassed) {
-        ui.muted(
-          "  Live tests confirmed " +
-          String(testReport.vulnerabilitiesFound) +
-          " vulnerability/ies."
-        );
-      }
-
-      ui.muted("");
-      ui.muted("Review the findings above and fix the issues before pushing.");
-
-      // Mention available patches if any were generated.
-      const successPatches = patchResults.filter((p) => p.success);
-      if (successPatches.length > 0) {
-        ui.muted("");
-        ui.muted(
-          String(successPatches.length) +
-          " self-healing patch(es) are available in .vibeguard/patches/"
-        );
-        ui.muted("Apply them with: git apply .vibeguard/patches/<file>.patch");
-      }
-
-      ui.muted("");
-      ui.muted("To bypass (NOT RECOMMENDED):");
-      ui.muted("  git push --no-verify");
+      renderFailureReport(verdict, testReport, patchResults, analysisPassed);
       process.exit(1);
     }
   } catch (err: unknown) {
