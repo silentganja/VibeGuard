@@ -26,7 +26,8 @@ import { capture, restore } from "./dbGuard";
 import { enforce as enforceCompliance } from "./compliance";
 import { generatePayloads } from "./payloadGen";
 import { runTests } from "./runner";
-import type { RunArgs, TargetTargets, TestReport } from "./types";
+import { generateAllPatches, formatPatchSummary } from "./healer";
+import type { RunArgs, TargetTargets, TestReport, PatchResult } from "./types";
 
 // ─── Help Text ───────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ ${"\x1b[90m"}Examples:${"\x1b[0m"}
   vibeguard install
   vibeguard config
 
-${"\x1b[90m"}Phase 6 · v0.6.0${"\x1b[0m"}
+${"\x1b[90m"}Phase 7 · v0.7.0${"\x1b[0m"}
 `;
 
 // ─── Argument Parser (zero-dependency) ───────────────────────────────────────
@@ -476,6 +477,58 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
       ui.muted("─ Phase 6 (Live Test Execution) skipped — no payloads to execute ─");
     }
 
+    // ═══ Phase 7: Self-Healing Patch Generation ════════════════════════
+    // When tests confirm vulnerabilities, call the LLM to generate
+    // localized code fixes. Patches are written to .vibeguard/patches/
+    // for the developer to review — they are NEVER applied automatically.
+    let patchResults: PatchResult[] = [];
+
+    if (!testReport.overallPass && testReport.vulnerabilitiesFound > 0) {
+      ui.space();
+      ui.header("Self-Healing Patch Engine");
+      ui.action(
+        "Generating patches for " +
+        String(testReport.vulnerabilitiesFound) + " confirmed vulnerability/ies..."
+      );
+
+      const projectRoot = findProjectRoot() ?? process.cwd();
+      patchResults = await generateAllPatches(config, testReport, targets, projectRoot);
+
+      // Display patch results.
+      ui.space();
+      if (patchResults.length > 0) {
+        for (const pr of patchResults) {
+          if (pr.success) {
+            ui.ok(
+              "Patch: " + (pr.patchPath ?? "unknown") +
+              " [" + (pr.vulnerabilityType ?? "unknown") + "]"
+            );
+            if (pr.explanation) {
+              ui.muted("  " + pr.explanation.slice(0, 200));
+            }
+          } else {
+            ui.warn(
+              "No patch for " + (pr.vulnerabilityType ?? "unknown") +
+              " — " + (pr.error ?? "Unknown error")
+            );
+          }
+        }
+
+        const successCount = patchResults.filter((p) => p.success).length;
+        if (successCount > 0) {
+          ui.space();
+          ui.muted(
+            String(successCount) + " patch(es) written to .vibeguard/patches/"
+          );
+          ui.muted("Review with: cat .vibeguard/patches/<file>.patch");
+          ui.muted("Apply with: git apply .vibeguard/patches/<file>.patch");
+        }
+      } else {
+        ui.muted("  No patches generated — no associated source files found for vulnerable endpoints.");
+      }
+      ui.rule();
+    }
+
     // ═══ Phase 4b: DB State Restore ═════════════════════════════════════
     ui.space();
     ui.action("Restoring database state...");
@@ -526,6 +579,18 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
 
       ui.muted("");
       ui.muted("Review the findings above and fix the issues before pushing.");
+
+      // Mention available patches if any were generated.
+      const successPatches = patchResults.filter((p) => p.success);
+      if (successPatches.length > 0) {
+        ui.muted("");
+        ui.muted(
+          String(successPatches.length) +
+          " self-healing patch(es) are available in .vibeguard/patches/"
+        );
+        ui.muted("Apply them with: git apply .vibeguard/patches/<file>.patch");
+      }
+
       ui.muted("");
       ui.muted("To bypass (NOT RECOMMENDED):");
       ui.muted("  git push --no-verify");

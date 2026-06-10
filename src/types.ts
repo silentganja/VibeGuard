@@ -435,6 +435,58 @@ export interface ExecutionResult {
   vulnerable: boolean;
 }
 
+// ─── Phase 7: Self-Healing Patch Engine ──────────────────────────────────────
+
+/** Aggregated exploit context for a single vulnerable test. */
+export interface ExploitContext {
+  /** The relative file path of the source file that failed. */
+  source_file: string;
+  /** The raw code contents of that file. */
+  source_code: string;
+  /** The specific payload data used in the successful attack. */
+  payload_data: Record<string, string>;
+  /** The attack type (vulnerability vector). */
+  attack_type: VulnerabilityVector;
+  /** The response signature or exception stack trace that triggered the failure. */
+  response_signature: string;
+  /** The target URL that was attacked. */
+  target_url: string;
+  /** HTTP method used. */
+  http_method: string;
+  /** The assertion category that triggered. */
+  assertion_category: string;
+  /** The assertion detail message. */
+  assertion_detail: string;
+}
+
+/** Structured remediation response expected from the LLM. */
+export interface RemediationResult {
+  /** Whether the LLM provided a remediation. */
+  remediation_applied: boolean;
+  /** The vulnerability type that was patched. */
+  vulnerability_type: string;
+  /** Short explanation of why the code broke and how the fix resolves it. */
+  explanation: string;
+  /** The complete, corrected contents of the source file with security patches applied. */
+  patched_code: string;
+}
+
+/** Result of the patch generation process for a single vulnerable file. */
+export interface PatchResult {
+  /** Whether a patch was successfully generated. */
+  success: boolean;
+  /** Path to the generated .patch file (relative to .vibeguard/patches/). */
+  patchPath: string | null;
+  /** The unified diff content. */
+  patchContent: string | null;
+  /** The vulnerability type that was addressed. */
+  vulnerabilityType: string | null;
+  /** Human-readable explanation of the fix. */
+  explanation: string | null;
+  /** Error message if generation failed. */
+  error: string | null;
+}
+
 /** Aggregate report for the full test run. */
 export interface TestReport {
   /** Every individual execution result. */

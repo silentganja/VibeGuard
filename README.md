@@ -1,14 +1,17 @@
 # VibeGuard
 
-**CLI-native adversarial local QA daemon** — intercepts `git push`, enforces code quality standards, extracts diffs, analyzes changes via your own LLM, maps endpoints to executable URLs, guards your database, generates red-team payloads, and fires live HTTP attacks to verify your code can withstand real exploits — all before it leaves your machine.
+**CLI-native adversarial local QA daemon** — intercepts `git push`, enforces code quality standards, extracts diffs, analyzes changes via your own LLM, maps endpoints to executable URLs, guards your database, generates red-team payloads, fires live HTTP attacks to verify your code can withstand real exploits, and auto-generates security patches for every confirmed vulnerability — all before it leaves your machine.
 
-> **Philosophy:** Your code should not leave your machine until an AI adversary has tried to break it — without touching production, without calling home, without runtime dependencies.
+> **Philosophy:** Your code should not leave your machine until an AI adversary has tried to break it — and an AI security engineer has fixed what broke — without touching production, without calling home, without runtime dependencies.
+
+> **⚠️ Model Requirement:** VibeGuard performs at **100% capability on unfiltered/uncensored AI models**. The LLM is instructed to think like an adversary — generating real SQL injection payloads, command injection strings, XSS vectors, and auth bypass attacks. **Filtered or safety-aligned models (e.g., some cloud-hosted, RLHF-heavy models) may refuse to generate exploit payloads**, causing Phase 5 (payload generation) and Phase 7 (patch generation) to fall back to deterministic defaults. For full adversarial coverage, use a local unfiltered model (Ollama with Llama 3, Mistral, CodeLlama, etc.) or a model with minimal refusal tuning.
 
 ---
 
 ## Table of Contents
 
 - [Architecture](#architecture)
+- [Model Requirements](#model-requirements)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Commands](#commands)
@@ -20,6 +23,7 @@
   - [Phase 4 — Database State Guard](#phase-4--database-state-guard)
   - [Phase 5 — Compliance & Payload Generation](#phase-5--compliance--payload-generation)
   - [Phase 6 — Live Execution & Response Assertion](#phase-6--live-execution--response-assertion)
+  - [Phase 7 — Self-Healing Patch Engine](#phase-7--self-healing-patch-engine)
 - [Pre-Push Hook Behavior](#pre-push-hook-behavior)
 - [Pipeline Flow](#pipeline-flow)
 - [Project Structure](#project-structure)
@@ -81,6 +85,20 @@
                          └────────────┬────────────┘
                                       │
                          ┌────────────▼────────────┐
+                         │  Phase 7                │
+                         │  healer.ts              │
+                         │                         │
+                         │  For each vuln found:   │
+                         │  Read source file       │
+                         │  Send exploit context   │
+                         │  + code to LLM          │
+                         │  Receive patched code   │
+                         │  Generate unified diff  │
+                         │  Write .patch files     │
+                         │  (NEVER auto-apply)     │
+                         └────────────┬────────────┘
+                                      │
+                         ┌────────────▼────────────┐
                          │  Phase 4b + Verdict     │
                          │                         │
                          │  Restore DB state       │
@@ -88,10 +106,58 @@
                          │  LLM + live test pass   │
                          │  → exit 0 (push)        │
                          │  Any failure → exit 1   │
+                         │  Show patch paths       │
                          └─────────────────────────┘
 ```
 
 **Zero runtime dependencies.** Everything runs on Node.js built-ins and native CLI tools (`git`, `mysqldump`, `pg_dump`). The LLM is your own — local or remote.
+
+---
+
+## Model Requirements
+
+VibeGuard's adversarial capabilities depend on the LLM's willingness to think like an attacker. The system prompts instruct the model to generate real exploit payloads and security patches — tasks that some safety-aligned models may refuse.
+
+### Unfiltered Models (100% Capability)
+
+Unfiltered or minimally-filtered models execute all VibeGuard phases at full capacity:
+
+| Model | Type | Phase 5 (Payloads) | Phase 7 (Patches) |
+|---|---|---|---|
+| **Llama 3 / 3.1** (8B, 70B, 405B) | Local — Ollama / vLLM | ✅ Full adversarial payloads | ✅ Full remediation patches |
+| **Mistral / Mixtral** (7B, 8×7B) | Local — Ollama / vLLM | ✅ Full adversarial payloads | ✅ Full remediation patches |
+| **CodeLlama** (7B, 13B, 34B) | Local — Ollama / vLLM | ✅ Full adversarial payloads | ✅ Full remediation patches |
+| **DeepSeek Coder / V3** | Local + Cloud | ✅ Full adversarial payloads | ✅ Full remediation patches |
+| **Qwen 2.5 Coder** (7B, 32B) | Local — Ollama / vLLM | ✅ Full adversarial payloads | ✅ Full remediation patches |
+| **Claude (Anthropic API)** | Cloud | ⚠️ May refuse some payloads | ✅ Full remediation patches |
+
+### Filtered / Safety-Aligned Models (Reduced Capability)
+
+Models with heavy RLHF safety tuning may refuse to generate exploit payloads. When this happens, VibeGuard **automatically falls back** to deterministic payloads (70+ built-in attack values across 14 vectors). Phase 7 patches may also be affected — the model may refuse to analyze or modify code it deems "harmful."
+
+| Model | Issue | Fallback Behavior |
+|---|---|---|
+| **GPT-4o / GPT-4** (OpenAI) | May refuse SQL injection / RCE payload generation | Falls back to deterministic payload library |
+| **Gemini** (Google) | Heavy safety filtering on adversarial prompts | Falls back to deterministic payload library |
+| **Claude** (Anthropic) | May refuse overtly malicious payloads (RCE, SQLi) | Falls back to deterministic payload library |
+| **Phi-3/4** (Microsoft) | Alignment tuning may block red-team prompts | Falls back to deterministic payload library |
+
+### Recommendation
+
+> **For full adversarial coverage, use a local unfiltered model.** Install [Ollama](https://ollama.com), pull `llama3.1:8b` or `mistral:7b`, and configure VibeGuard:
+> ```json
+> {
+>   "llm_provider": "custom",
+>   "llm_api_endpoint": "http://localhost:11434/v1",
+>   "llm_api_key": "ollama",
+>   "llm_model": "llama3.1:8b"
+> }
+> ```
+
+**Why this matters:**
+- **Phase 5 (Payload Generation):** Filtered models may refuse to craft `' OR 1=1--` strings or `<script>alert(1)</script>` vectors. The deterministic fallback covers all 14 vulnerability classes, but lacks context-awareness (e.g., it won't know your endpoint expects `user_uuid` specifically).
+- **Phase 7 (Patch Generation):** Filtered models may refuse to analyze vulnerable code or output "I cannot assist with that." The push still blocks, but you won't get a remediation patch — you'll need to fix the code manually.
+- **Phase 2 (LLM Analysis):** Generally works on all models — vulnerability analysis is a defensive task that rarely triggers safety filters.
 
 ---
 
@@ -160,8 +226,9 @@ On every `git push`, VibeGuard will:
 8. Generate red-team attack payloads via LLM (with deterministic fallback).
 9. Fire payloads live against your server (parallel, 3s timeout each).
 10. Run security assertions on every response (status code, DB leaks, auth bypass).
-11. Restore your database to its pre-test state.
-12. Report the combined verdict — pass or block the push.
+11. **Generate self-healing patches** for every confirmed vulnerability (Phase 7).
+12. Restore your database to its pre-test state.
+13. Report the combined verdict — pass or block the push. Show available patches.
 
 ---
 
@@ -622,6 +689,134 @@ The push passes only if **both** the LLM analysis (Phase 2) AND the live test ru
    Review the findings above and fix the issues before pushing.
 ```
 
+### Phase 7 — Self-Healing Patch Engine
+
+**Module:** [`src/healer.ts`](src/healer.ts)
+
+When live tests confirm a vulnerability, Phase 7 automatically generates a localized code fix — a security patch — for each vulnerable file. Patches are written to `.vibeguard/patches/` for the developer to review. **Patches are NEVER applied automatically** — you review and apply them manually.
+
+#### Pipeline Position
+
+```
+Phase 6 (Live Tests) → Phase 7 (Patch Generation) → Phase 4b (DB Restore) → Verdict
+```
+
+Phase 7 runs **before** database restore, so the exploit context (response signatures, stack traces) is still fresh for the LLM to analyze.
+
+#### Step 1 — Exploit Context Aggregation
+
+For each vulnerable test result, `buildExploitContext()` compiles a forensic profile:
+
+- **Source file path** — cross-referenced from the Phase 3 target map (`target_url` → `associated_file`)
+- **Raw source code** — read from disk (files up to 100KB; larger files are skipped with a warning)
+- **Attack payload data** — the exact parameters that breached the endpoint
+- **Response signature** — the triggered assertion category, matched DB error pattern, HTTP status, and response body excerpt (first 500 chars)
+- **Vulnerability type** — the attack vector that confirmed the breach
+
+#### Step 2 — Remediation Prompt
+
+The exploit context + complete source code is sent to the LLM with a **Hardened Systems Security Engineer** system prompt. The model is instructed to:
+
+1. Analyze WHY the exploit succeeded
+2. Produce a corrected version of the **entire source file**
+3. Follow vulnerability-specific remediation guidelines:
+
+| Vulnerability | Remediation Strategy |
+|---|---|
+| `sql_injection` | Replace string concatenation with parameterized queries / prepared statements |
+| `auth_bypass` / `privilege_escalation` | Add authorization checks, session validation, role verification |
+| `xss` | Escape output with context-appropriate encoding; avoid innerHTML |
+| `rce` / `command_injection` | Use argument arrays instead of shell strings; validate with allowlists |
+| `path_traversal` | Canonicalize paths; verify result stays within allowed root |
+| `ssrf` | Validate URLs against allowlists; block internal IP ranges |
+| `deserialization` | Use safe formats (JSON) with schema validation |
+| `input_fuzzing` / `misconfiguration` | Add input validation; enable security features |
+
+#### Step 3 — Response Parsing
+
+The LLM returns a JSON object:
+
+```json
+{
+  "remediation_applied": true,
+  "vulnerability_type": "sql_injection",
+  "explanation": "The login handler concatenated user input directly into a SQL query. Replaced with a parameterized statement using positional placeholders, which prevents the injected ' OR '1'='1 payload from altering query logic.",
+  "patched_code": "<?php\n// Full corrected file contents...\n?>"
+}
+```
+
+If the model cannot determine a fix, `remediation_applied` is `false` — this is better than guessing.
+
+#### Step 4 — Unified Diff Generation
+
+`generateUnifiedDiff()` implements an **LCS (Longest Common Subsequence)** based diff algorithm:
+
+1. Compute the LCS table between original and patched line arrays
+2. Backtrack through the table to produce an edit script (keep / insert / delete)
+3. Group edits into hunks with **3 lines of context** (standard unified diff format)
+4. Merge adjacent hunks that overlap in their context windows
+5. Format as standard `--- a/` / `+++ b/` / `@@` unified diff
+
+The diff is written to `.vibeguard/patches/<filename>.patch`.
+
+#### Step 5 — Patch File Output
+
+Each vulnerable file gets its own `.patch` file:
+
+```
+.vibeguard/patches/
+├── api_login.php.patch
+├── src_auth_middleware.ts.patch
+└── controllers_user_controller.py.patch
+```
+
+#### Terminal Display
+
+```
+── Self-Healing Patch Engine ──
+→  Generating patches for 2 confirmed vulnerability/ies...
+→  Requesting patch from llama3.1:8b for api/login.php (sql_injection)...
+
+✓  Patch: .vibeguard/patches/api_login.php.patch [sql_injection]
+   Replaced string concatenation with parameterized query using PDO prepared statements.
+
+✓  Patch: .vibeguard/patches/src_auth.ts.patch [auth_bypass]
+   Added session token validation before returning user data. Returns 401 for unauthenticated requests.
+
+   2 patch(es) written to .vibeguard/patches/
+   Review with: cat .vibeguard/patches/<file>.patch
+   Apply with: git apply .vibeguard/patches/<file>.patch
+```
+
+#### Reviewing and Applying Patches
+
+```bash
+# Review a patch before applying
+cat .vibeguard/patches/api_login.php.patch
+
+# Apply a single patch
+git apply .vibeguard/patches/api_login.php.patch
+
+# Apply all patches
+git apply .vibeguard/patches/*.patch
+
+# Check what a patch would change (dry run)
+git apply --stat .vibeguard/patches/api_login.php.patch
+```
+
+#### Failure Modes
+
+| Scenario | Behavior |
+|---|---|
+| No associated source file found for target URL | Patch skipped — error in results |
+| Source file too large (> 100KB) | Patch skipped — file too large |
+| LLM call fails / times out | Patch skipped — LLM error in results |
+| LLM returns `remediation_applied: false` | Patch skipped — model could not determine fix |
+| Patched code identical to original | Patch skipped — no changes needed |
+| Cannot write patch file to disk | Error reported, diff content still available in memory |
+
+All failures are non-blocking — the push is still blocked (vulnerabilities were found), but you'll need to fix the code manually if patches couldn't be generated.
+
 ---
 
 ## Pre-Push Hook Behavior
@@ -631,7 +826,7 @@ When `vibeguard install` is run, it writes a script to `.git/hooks/pre-push`. On
 1. **Git passes pushed refs** to the hook via stdin (one line per ref: `local_ref local_sha remote_ref remote_sha`).
 2. **The hook parses** each ref to extract branch names.
 3. **The hook invokes** `vibeguard run --local <branch> --remote <branch> --sha <sha>` for each ref.
-4. **VibeGuard runs the full pipeline** (Phases 1–6 — compliance, diff, filter, LLM analysis, URL mapping, DB guard, payload generation, live test execution, response assertion, DB restore).
+4. **VibeGuard runs the full pipeline** (Phases 1–7 — compliance, diff, filter, LLM analysis, URL mapping, DB guard, payload generation, live test execution, response assertion, self-healing patch generation, DB restore).
 5. **If VibeGuard exits 0:** The push proceeds.
 6. **If VibeGuard exits 1:** The push is blocked. The developer sees the vulnerability report and must fix the issues.
 
@@ -718,7 +913,24 @@ Developer runs: git push
        │                                    │
        │         ┌──────────────────────────┘
        │         │
-       ▼         ▼
+       │         ▼
+       │  ┌─────────────────────┐
+       │  │ PHASE 7             │
+       │  │ healer.ts           │
+       │  │                     │
+       │  │ For each vuln:      │
+       │  │ Read source file    │
+       │  │ Compile exploit ctx │
+       │  │ Call LLM as         │
+       │  │ Hardened Security   │
+       │  │ Engineer            │
+       │  │ Generate .patch     │
+       │  │ (NEVER auto-apply)  │
+       │  └──────────┬──────────┘
+       │             │
+       │             └──────────┐
+       │                        │
+       ▼                        ▼
 ┌─────────────────────┐
 │ PHASE 4b + VERDICT  │
 │ dbGuard.ts          │
@@ -728,10 +940,11 @@ Developer runs: git push
 │ LLM pass + test     │
 │ pass → exit 0       │
 │ Any fail → exit 1   │
+│ Show patch paths    │
 └─────────────────────┘
 ```
 
-**Fail-closed design:** Any error in the pipeline (LLM timeout, server unreachable, DB snapshot failure) blocks the push and exits with code 1. VibeGuard defaults to safety.
+**Fail-closed design:** Any error in the pipeline (LLM timeout, server unreachable, DB snapshot failure, patch generation failure) blocks the push and exits with code 1. VibeGuard defaults to safety. Patch generation failures are non-blocking but reported — vulnerabilities were still found.
 
 ---
 
@@ -759,7 +972,9 @@ vibe-guard/
 │   ├── payloadGen.ts   # Phase 5b — Red-team adversarial payload generation via LLM + deterministic fallback
 │   │
 │   ├── runner.ts       # Phase 6a — Parallel HTTP execution engine (8 concurrent, 3s timeout, GET/POST formatting)
-│   └── assertion.ts    # Phase 6b — Security assertion engine (status code, DB leak, auth bypass signature matching)
+│   ├── assertion.ts    # Phase 6b — Security assertion engine (status code, DB leak, auth bypass signature matching)
+│   │
+│   └── healer.ts       # Phase 7 — Self-Healing Patch Engine (exploit context, remediation LLM prompt, unified LCS diff, .patch output)
 │
 ├── dist/               # Compiled JavaScript output (after `npm run build`)
 ├── .vibeguard.json     # Project configuration (created by `vibeguard init`)
@@ -829,9 +1044,43 @@ git commit -m "feat: add user authentication endpoint with JWT session tokens"
 
 Valid prefixes: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, `chore:`, `revert:`, `security:`
 
-### "Payload generation failed"
+### "Payload generation failed" or "LLM generated 0 payloads"
 
-The LLM could not generate payloads. VibeGuard automatically falls back to deterministic payload generation using a built-in library of 70+ attack values. The fallback payloads cover all 14 vulnerability vectors. You'll see `fallbackCount` in the payload generation summary — these are perfectly valid for testing.
+The LLM could not generate payloads — this is most often caused by a **filtered/safety-aligned model** refusing to create exploit strings. VibeGuard automatically falls back to deterministic payload generation using a built-in library of 70+ attack values. The fallback payloads cover all 14 vulnerability vectors. You'll see `fallbackCount` in the payload generation summary — these are perfectly valid for testing.
+
+For context-aware payloads (where the LLM knows your endpoint expects `user_uuid` and crafts an injection specific to that field), use an unfiltered model. See [Model Requirements](#model-requirements).
+
+### "LLM generated 0 payloads — all fallback"
+
+Your LLM may be a filtered/safety-aligned model that refuses to generate exploit payloads. VibeGuard automatically falls back to a built-in library of 70+ attack values — these work, but lack context-awareness.
+
+**Fix:** Use an unfiltered local model for full adversarial coverage. See [Model Requirements](#model-requirements) for recommendations.
+
+```bash
+# Install Ollama and an unfiltered model
+ollama pull llama3.1:8b
+```
+
+Then update `.vibeguard.json`:
+```json
+{
+  "llm_provider": "custom",
+  "llm_api_endpoint": "http://localhost:11434/v1",
+  "llm_api_key": "ollama",
+  "llm_model": "llama3.1:8b"
+}
+```
+
+### "No patches generated" or "LLM could not determine a fix"
+
+The self-healing patch engine (Phase 7) couldn't generate a fix. This can happen when:
+
+- **Filtered model refused:** Safety-aligned models may refuse to analyze vulnerable code or output modified versions. Use an unfiltered model for patch generation.
+- **Source file not found:** The vulnerable endpoint's source file couldn't be located from the target URL mapping. Check that the endpoint file from Phase 3 actually exists on disk.
+- **File too large:** Source files over 100KB are skipped to avoid overwhelming the LLM's context window.
+- **LLM returned `remediation_applied: false`:** The model couldn't determine a safe fix — this is better than guessing incorrectly.
+
+**Fix:** Review the patch results in the terminal output. Each failure includes a specific error message. For manual remediation, review the vulnerability details shown in the Phase 6 results and apply the appropriate fix based on the vulnerability type.
 
 ### Database tools not found
 
