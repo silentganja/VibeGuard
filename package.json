@@ -1,0 +1,21 @@
+{
+  "name": "vibeguard",
+  "version": "0.1.0",
+  "description": "CLI-native adversarial local QA daemon — intercepts git pushes, extracts diffs, and validates changes via custom LLMs before they leave your machine.",
+  "main": "dist/cli.js",
+  "bin": {
+    "vibeguard": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["git", "pre-push", "hook", "llm", "qa", "code-review"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}
