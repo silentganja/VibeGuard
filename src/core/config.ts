@@ -45,6 +45,10 @@ const DEFAULT_CONFIG: VibeGuardConfig = {
   webhook_slack: "",
   webhook_discord: "",
   webhook_teams: "",
+  // Phase 14 defaults
+  export_tests_enabled: true,
+  export_tests_framework: "bash",
+  export_tests_dir: ".vibeguard/tests",
 };
 
 // â”€â”€â”€ Project Root Discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

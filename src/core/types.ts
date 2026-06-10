@@ -72,6 +72,17 @@ export interface VibeGuardConfig {
 
   /** Microsoft Teams incoming webhook URL for CI/CD vulnerability alerts. */
   webhook_teams?: string;
+
+  // ── Phase 14: Automated Test Export ──────────────────────────────────
+
+  /** Enable automatic regression test generation from confirmed vulnerabilities. Default: true. */
+  export_tests_enabled?: boolean;
+
+  /** Test framework format for generated regression tests. Default: "bash". */
+  export_tests_framework?: "jest" | "bash";
+
+  /** Directory for generated regression test files. Default: ".vibeguard/tests". */
+  export_tests_dir?: string;
 }
 
 /** Shape of the raw JSON on disk before validation. */

@@ -598,6 +598,42 @@ export function renderInfo(msg: string): void {
   write(GRAY + msg + R);
 }
 
+
+// Phase 14: Regression Test Export Notice
+
+/**
+ * Render a notice that regression tests were generated and auto-staged.
+ *
+ * Displayed as a high-contrast success line beneath the failure report
+ * so the developer knows the test is ready to commit alongside the fix.
+ *
+ * @param testPaths - Absolute paths to the generated test files.
+ */
+export function renderExportNotice(testPaths: string[]): void {
+  if (testPaths.length === 0) return;
+
+  write("");
+  write(
+    GREEN + BOLD + "  [VibeGuard]" + R +
+    GRAY + " Regression test" + (testPaths.length === 1 ? "" : "s") +
+    " generated and staged:" + R
+  );
+
+  for (const p of testPaths) {
+    // Show path relative to cwd for readability.
+    const display = p.startsWith(process.cwd())
+      ? p.slice(process.cwd().length + 1)
+      : p;
+    write(GRAY + "    " + display + R);
+  }
+
+  write("");
+  write(
+    GRAY + "  Tip:" + R +
+    " Run the test to verify the fix, then commit together."
+  );
+}
+
 // â”€â”€â”€ Internal Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
