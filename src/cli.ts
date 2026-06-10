@@ -15,7 +15,7 @@
  */
 
 import * as ui from "./ui";
-import { initConfig, readConfig, printConfig } from "./config";
+import { initConfig, readConfig, printConfig, findProjectRoot } from "./config";
 import { installHook, uninstallHook } from "./hooks";
 import { extractDiff } from "./git";
 import { filterDiff } from "./parser";
@@ -23,7 +23,10 @@ import { analyzeDiff } from "./llm";
 import { checkServer, formatCheckResult } from "./checker";
 import { mapTargetsFromAnalysis, formatMappingSummary } from "./mapper";
 import { capture, restore } from "./dbGuard";
-import type { RunArgs, TargetTargets } from "./types";
+import { enforce as enforceCompliance } from "./compliance";
+import { generatePayloads } from "./payloadGen";
+import { runTests } from "./runner";
+import type { RunArgs, TargetTargets, TestReport } from "./types";
 
 // ─── Help Text ───────────────────────────────────────────────────────────────
 
@@ -45,7 +48,7 @@ ${"\x1b[90m"}Examples:${"\x1b[0m"}
   vibeguard install
   vibeguard config
 
-${"\x1b[90m"}Phase 4 · v0.4.0${"\x1b[0m"}
+${"\x1b[90m"}Phase 6 · v0.6.0${"\x1b[0m"}
 `;
 
 // ─── Argument Parser (zero-dependency) ───────────────────────────────────────
@@ -128,6 +131,7 @@ function handleConfig(): void {
  * Internal command invoked by the pre-push hook.
  *
  * Full pipeline:
+ *   0. Compliance checks — README + semantic commit message (Phase 5).
  *   1. Parse --local, --remote flags from the hook.
  *   2. Read the project config.
  *   3. Extract the raw git diff (Phase 1).
@@ -136,8 +140,8 @@ function handleConfig(): void {
  *   6. Send filtered payload to the configured LLM (Phase 2 — llm).
  *   7. Resolve endpoints to executable test URLs (Phase 3 — mapper).
  *   8. Capture database state snapshot (Phase 4 — dbGuard.capture).
- *   9. [Future: Phase 5 — Generate adversarial payloads].
- *  10. [Future: Phase 6 — Fire payloads & analyze responses].
+ *   9. Generate adversarial payloads via LLM (Phase 5 — payloadGen).
+ *  10. Fire payloads & analyze responses live (Phase 6 — runner + assertion).
  *  11. Restore database state (Phase 4 — dbGuard.restore).
  *  12. Build pass/fail verdict and report findings.
  *  13. Exit 0 (pass) or 1 (block).
@@ -152,6 +156,16 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
   }
 
   try {
+    // ═══ Phase 5a: Compliance Checks (README + Commit) ════════════════════
+    // Runs BEFORE any network calls, LLM analysis, or DB snapshots.
+    // If README is missing/stale or commit message violates Conventional
+    // Commits, the push is aborted instantly with exit code 1.
+    const projectRoot = findProjectRoot() ?? process.cwd();
+
+    ui.space();
+    ui.header("Compliance Checks");
+    enforceCompliance(projectRoot);
+
     // ═══ Phase 1: Extract Raw Diff ═══════════════════════════════════════
     ui.action("Extracting diff: " + local + " -> " + (remote || "upstream"));
 
@@ -362,17 +376,105 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
       ui.muted("  " + snapshot.summary);
     }
 
-    // ═══ Phase 5 & 6: Payload Triggering (Future) ═══════════════════════
-    // ────────────────────────────────────────────────────────────────────
-    // TODO: Phase 5 — Generate adversarial payloads from vulnerability vectors.
-    // TODO: Phase 6 — Fire payloads against resolved URLs and analyze responses.
-    //
-    // The capture/restore lifecycle wraps this section so that any
-    // database side effects from test payloads are fully reversible.
-    // ────────────────────────────────────────────────────────────────────
+    // ═══ Phase 5b: Adversarial Payload Generation ══════════════════════
     ui.space();
-    ui.muted("─ Phase 5 & 6 (Payload Triggering) not yet integrated ─");
-    ui.muted("  DB guard lifecycle is active — capture/restore will wrap future payloads.");
+    ui.header("Adversarial Payload Generation");
+
+    const payloadResult = await generatePayloads(config, targets, filtered);
+
+    ui.space();
+    if (payloadResult.attackSuite.attack_suite.length > 0) {
+      ui.kv("Total payloads", String(payloadResult.attackSuite.attack_suite.length));
+      ui.kv("LLM-generated", String(payloadResult.generatedCount));
+      ui.kv("Fallback-generated", String(payloadResult.fallbackCount));
+
+      if (payloadResult.errors.length > 0) {
+        ui.warn("  Payload generation errors:");
+        for (const err of payloadResult.errors) {
+          ui.muted("    - " + err.target_url + ": " + err.error.slice(0, 120));
+        }
+      }
+
+      // Show generated payloads.
+      ui.space();
+      ui.muted("Generated attack suite:");
+      for (const p of payloadResult.attackSuite.attack_suite) {
+        const R = "\x1b[0m";
+        ui.muted("  > \x1b[31m" + p.attack_type + R + " " + p.method + " " + p.target_url);
+        const paramKeys = Object.keys(p.payload_data);
+        if (paramKeys.length > 0) {
+          const preview: string[] = [];
+          for (const k of paramKeys.slice(0, 3)) {
+            const val = p.payload_data[k];
+            const truncated = val.length > 60 ? val.slice(0, 57) + "..." : val;
+            preview.push(k + "=" + truncated);
+          }
+          const suffix = paramKeys.length > 3 ? " (+" + String(paramKeys.length - 3) + " more)" : "";
+          ui.muted("    Params: " + preview.join(", ") + suffix);
+        }
+        ui.muted("    Criteria: " + p.expected_fail_criteria.slice(0, 120));
+      }
+      ui.ok("Payload generation complete");
+    } else {
+      ui.muted("  No payloads generated — no vulnerability vectors detected on any endpoint.");
+    }
+
+    // ═══ Phase 6: Live Payload Execution & Response Analysis ═══════════
+    let testReport: TestReport = {
+      results: [],
+      vulnerabilitiesFound: 0,
+      testsPassed: 0,
+      testsErrored: 0,
+      overallPass: true,
+      summary: "No payloads executed.",
+    };
+
+    if (payloadResult.attackSuite.attack_suite.length > 0) {
+      ui.space();
+      ui.header("Live Test Execution");
+      testReport = await runTests(payloadResult.attackSuite);
+
+      // Print per-result details.
+      ui.space();
+      for (const r of testReport.results) {
+        const R = "\x1b[0m";
+        if (r.vulnerable) {
+          ui.muted("  \x1b[31m✕ VULNERABLE\x1b[0m " + r.payload.method + " " + r.payload.target_url);
+          ui.muted("    Attack: " + r.payload.attack_type + " | HTTP " + String(r.statusCode ?? "N/A") + " | " + String(r.latencyMs) + "ms");
+          for (const a of r.assertions) {
+            if (a.triggered) {
+              ui.muted("    [" + a.category + "] " + a.detail.slice(0, 130));
+            }
+          }
+        } else if (!r.completed) {
+          ui.muted("  \x1b[33m! ERROR\x1b[0m    " + r.payload.method + " " + r.payload.target_url);
+          ui.muted("    " + (r.error ?? "Unknown error") + " (" + String(r.latencyMs) + "ms)");
+        } else {
+          ui.muted("  \x1b[32m✓ PASS\x1b[0m     " + r.payload.method + " " + r.payload.target_url);
+          ui.muted("    HTTP " + String(r.statusCode) + " | " + String(r.latencyMs) + "ms");
+        }
+      }
+
+      ui.space();
+      ui.rule();
+
+      // Print aggregate summary.
+      for (const line of testReport.summary.split("\n")) {
+        if (line.trim()) {
+          if (testReport.overallPass) {
+            ui.muted(line);
+          } else {
+            ui.muted(line);
+          }
+        } else {
+          ui.space();
+        }
+      }
+      ui.rule();
+    } else {
+      ui.space();
+      ui.muted("─ Phase 6 (Live Test Execution) skipped — no payloads to execute ─");
+    }
 
     // ═══ Phase 4b: DB State Restore ═════════════════════════════════════
     ui.space();
@@ -396,15 +498,33 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
 
     ui.rule();
 
-    // Final pass/fail decision.
-    if (verdict.pass) {
+    // ═══ Combined Final Verdict ═════════════════════════════════════════
+    // The push passes only if BOTH the LLM analysis AND the live test run
+    // report no vulnerabilities. If either finds issues, the push is blocked.
+    const analysisPassed = verdict.pass;
+    const testsPassed = testReport.overallPass;
+    const finalPass = analysisPassed && testsPassed;
+
+    if (finalPass) {
       ui.ok("VibeGuard analysis passed - push allowed");
       process.exit(0);
     } else {
       ui.space();
       ui.fail("VibeGuard analysis FAILED — push blocked");
       ui.muted("");
-      ui.muted("The diff contains high-severity vulnerability vectors.");
+
+      if (!analysisPassed) {
+        ui.muted("  LLM analysis detected high-severity vulnerability vectors.");
+      }
+      if (!testsPassed) {
+        ui.muted(
+          "  Live tests confirmed " +
+          String(testReport.vulnerabilitiesFound) +
+          " vulnerability/ies."
+        );
+      }
+
+      ui.muted("");
       ui.muted("Review the findings above and fix the issues before pushing.");
       ui.muted("");
       ui.muted("To bypass (NOT RECOMMENDED):");

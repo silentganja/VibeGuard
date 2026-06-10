@@ -209,27 +209,33 @@ function buildDiffPayload(diff: FilteredDiff): string {
 // ─── LLM API Clients ────────────────────────────────────────────────────────────
 
 /**
- * Call the user's configured LLM API with the system prompt and diff payload.
+ * Call the user's configured LLM API with the system prompt and user message.
  *
  * Dispatches to the correct provider based on `config.llm_provider`.
  * All providers return the raw response text for downstream JSON parsing.
+ *
+ * @param config      - Validated VibeGuard configuration.
+ * @param userMessage - The user message to send.
+ * @param systemPrompt - Optional custom system prompt. Uses Sovereign System Architect default if omitted.
  */
-async function callLLM(
+export async function callLLM(
   config: VibeGuardConfig,
-  userMessage: string
+  userMessage: string,
+  systemPrompt?: string
 ): Promise<string> {
   const apiKey = resolveApiKey(config.llm_api_key);
+  const prompt = systemPrompt ?? SYSTEM_PROMPT;
 
   switch (config.llm_provider) {
     case "custom":
     case "openai":
-      return callOpenAICompatible(config.llm_api_endpoint, apiKey, config.llm_model, userMessage);
+      return callOpenAICompatible(config.llm_api_endpoint, apiKey, config.llm_model, userMessage, prompt);
 
     case "anthropic":
-      return callAnthropic(config.llm_api_endpoint, apiKey, config.llm_model, userMessage);
+      return callAnthropic(config.llm_api_endpoint, apiKey, config.llm_model, userMessage, prompt);
 
     default:
-      throw new Error(`Unknown LLM provider: ${config.llm_provider}`);
+      throw new Error("Unknown LLM provider: " + config.llm_provider);
   }
 }
 
@@ -244,14 +250,15 @@ async function callOpenAICompatible(
   endpoint: string,
   apiKey: string,
   model: string,
-  userMessage: string
+  userMessage: string,
+  systemPrompt?: string
 ): Promise<string> {
   const url = endpoint.replace(/\/+$/, "") + "/chat/completions";
 
   const body: Record<string, unknown> = {
     model,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt ?? SYSTEM_PROMPT },
       { role: "user", content: userMessage },
     ],
     temperature: 0.1,       // Low temp for deterministic analysis.
@@ -320,13 +327,14 @@ async function callAnthropic(
   endpoint: string,
   apiKey: string,
   model: string,
-  userMessage: string
+  userMessage: string,
+  systemPrompt?: string
 ): Promise<string> {
   const url = endpoint.replace(/\/+$/, "") + "/messages";
 
   const body: Record<string, unknown> = {
     model,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt ?? SYSTEM_PROMPT,
     messages: [
       { role: "user", content: userMessage },
       { role: "assistant", content: "{" },  // Prefill to force JSON output.

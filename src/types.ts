@@ -337,3 +337,116 @@ export interface DbConnectionConfig {
   name: string;
   sqlitePath: string;
 }
+
+// ─── Phase 5: Compliance & Payload Generation ──────────────────────────────────
+
+/** Result of the compliance verification step. */
+export interface ComplianceResult {
+  /** Whether all checks passed. */
+  passed: boolean;
+  /** README.md existence and content check. */
+  readme_check: { ok: boolean; reason: string };
+  /** Semantic commit message check. */
+  commit_check: { ok: boolean; reason: string };
+}
+
+/** Valid Conventional Commits prefixes. */
+export const CONVENTIONAL_COMMIT_PREFIXES = [
+  "feat:",
+  "fix:",
+  "docs:",
+  "style:",
+  "refactor:",
+  "perf:",
+  "test:",
+  "build:",
+  "ci:",
+  "chore:",
+  "revert:",
+  "security:",
+] as const;
+
+/** A single adversarial test payload. */
+export interface AttackPayload {
+  /** The target URL to fire this payload against. */
+  target_url: string;
+  /** HTTP method for the request. */
+  method: "POST" | "GET";
+  /** The vulnerability class this payload tests. */
+  attack_type: VulnerabilityVector;
+  /** Key-value pairs of parameter names to malicious values. */
+  payload_data: Record<string, string>;
+  /** What response indicates the attack succeeded. */
+  expected_fail_criteria: string;
+}
+
+/** Container for the full attack suite returned by the LLM. */
+export interface AttackSuite {
+  attack_suite: AttackPayload[];
+}
+
+/** Result of the payload generation phase. */
+export interface PayloadGenResult {
+  /** Whether generation succeeded (LLM responded with parseable JSON). */
+  success: boolean;
+  /** The full attack suite. */
+  attackSuite: AttackSuite;
+  /** Count of payloads that were LLM-generated vs fallback-generated. */
+  generatedCount: number;
+  /** Count of payloads created via fallback when LLM parsing failed. */
+  fallbackCount: number;
+  /** Per-target errors, if any. */
+  errors: Array<{ target_url: string; error: string }>;
+}
+
+// ─── Phase 6: Execution & Assertion ────────────────────────────────────────────
+
+/** The outcome of a single assertion check against a response. */
+export interface AssertionVerdict {
+  /** Whether the assertion triggered (true = vulnerability confirmed). */
+  triggered: boolean;
+  /** Which assertion category fired. */
+  category: "status_code" | "database_leak" | "auth_bypass" | "none";
+  /** Human-readable explanation of what was detected. */
+  detail: string;
+  /** The matched signature or pattern that triggered (if any). */
+  matched_signature: string | null;
+}
+
+/** Result of executing a single adversarial payload. */
+export interface ExecutionResult {
+  /** The payload that was executed. */
+  payload: AttackPayload;
+  /** HTTP status code returned by the server. */
+  statusCode: number | null;
+  /** Whether the request completed or timed out / errored. */
+  completed: boolean;
+  /** Response latency in milliseconds. */
+  latencyMs: number;
+  /** First 2000 characters of the response body (for signature scanning). */
+  responseBody: string;
+  /** Response headers (as key-value pairs). */
+  responseHeaders: Record<string, string>;
+  /** Error message if the request failed entirely. */
+  error: string | null;
+  /** Assertion verdicts for this response. */
+  assertions: AssertionVerdict[];
+  /** Overall verdict: true if ANY assertion triggered (vulnerability confirmed). */
+  vulnerable: boolean;
+}
+
+/** Aggregate report for the full test run. */
+export interface TestReport {
+  /** Every individual execution result. */
+  results: ExecutionResult[];
+  /** Number of tests that confirmed a vulnerability. */
+  vulnerabilitiesFound: number;
+  /** Number of tests that passed cleanly. */
+  testsPassed: number;
+  /** Number of tests that failed to execute (network error, timeout). */
+  testsErrored: number;
+  /** Overall pass/fail — true if NO vulnerabilities were confirmed. */
+  overallPass: boolean;
+  /** Human-readable summary for the terminal. */
+  summary: string;
+}
