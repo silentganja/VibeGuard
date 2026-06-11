@@ -15,6 +15,7 @@
  */
 
 import { execSync, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import type { VibeGuardConfig, ServerCheckResult } from "../core/types";
 import { VERSION } from "../core/version";
 import * as ui from "../cli/ui";
@@ -66,14 +67,43 @@ export async function checkServer(config: VibeGuardConfig): Promise<ServerCheckR
   // Server is unreachable — try auto-start if configured.
   if (config.server_start_command && config.server_start_command.trim().length > 0) {
     ui.muted("Local server is not running. Attempting auto-start...");
-    const started = startServer(config.server_start_command);
+    const child = startServer(config.server_start_command);
 
-    if (!started) {
+    if (!child) {
       return {
         reachable: false,
         statusCode: null,
         latencyMs: null,
-        error: `Server start command failed. Tried: ${config.server_start_command}`,
+        error: `Server start command could not be spawned: ${config.server_start_command}`,
+      };
+    }
+
+    // Track async spawn failures so we can surface them quickly instead of
+    // waiting the full 60s polling deadline for a dead process.
+    let spawnError: string | null = null;
+    child.on("error", (err) => {
+      spawnError = "Server start command failed to spawn: " + err.message;
+    });
+    child.on("exit", (code, signal) => {
+      // A non-daemonizing command that exits early (e.g., bad binary name)
+      // is a hard failure — the server will never become reachable.
+      if (code !== null && code !== 0) {
+        spawnError = `Server start command exited with code ${code}. Check the command in .vibeguard.json.`;
+      } else if (signal) {
+        spawnError = `Server start command was killed by signal ${signal}.`;
+      }
+    });
+
+    // Let the event loop process any immediate spawn/exit errors.
+    await sleep(500);
+
+    if (spawnError) {
+      ui.warn(spawnError);
+      return {
+        reachable: false,
+        statusCode: null,
+        latencyMs: null,
+        error: spawnError,
       };
     }
 
@@ -87,6 +117,16 @@ export async function checkServer(config: VibeGuardConfig): Promise<ServerCheckR
     let lastCheck: ServerCheckResult | null = null;
 
     while (Date.now() < deadline) {
+      // Bail early if the child died while we were polling.
+      if (spawnError) {
+        return {
+          reachable: false,
+          statusCode: lastCheck?.statusCode ?? null,
+          latencyMs: null,
+          error: spawnError,
+        };
+      }
+
       await sleep(SERVER_READY_POLL_MS);
       lastCheck = await runCheck(baseUrl);
       if (lastCheck.reachable) {
@@ -238,9 +278,10 @@ async function probe(url: string, method: "HEAD" | "GET"): Promise<ProbeResult> 
  * verified by polling the health endpoint in checkServer(). Cleanup is the
  * responsibility of server_stop_command / stopServer().
  *
- * Returns true if the process could be spawned, false otherwise.
+ * Returns the ChildProcess so callers can attach error/exit listeners, or
+ * null if the process could not be spawned at all.
  */
-function startServer(command: string): boolean {
+function startServer(command: string): ChildProcess | null {
   try {
     const child = spawn(command, {
       shell: true,
@@ -248,17 +289,13 @@ function startServer(command: string): boolean {
       stdio: "ignore",
     });
 
-    child.on("error", (err) => {
-      ui.warn("Server start command failed to spawn: " + err.message);
-    });
-
     // Let the child outlive this process — it's the dev server.
     child.unref();
-    return true;
+    return child;
   } catch (err: unknown) {
     const msg = (err as Error).message ?? String(err);
     ui.warn("Server start command failed: " + msg);
-    return false;
+    return null;
   }
 }
 

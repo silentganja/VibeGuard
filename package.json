@@ -11,6 +11,7 @@
     "build:bundle": "node scripts/build.mjs",
     "build:all": "npm run build && npm run build:bundle",
     "start": "node dist/cli/index.js",
+    "test": "npx tsx --test tests/*.test.ts",
     "prepublishOnly": "npm run build:all",
     "postinstall": "node scripts/verify.mjs"
   },
