@@ -134,6 +134,10 @@ git push             # VibeGuard triggers automatically before the push
 
 On every `git push`, VibeGuard validates your README and commit message, extracts the diff, analyzes it via your LLM, maps endpoints to executable URLs, snapshots your database, generates red-team payloads, fires live HTTP exploits, judges responses, generates remediation patches, exports regression tests, and reports the verdict — all before your code leaves your machine.
 
+<p align="center">
+  <img src="assets/cli-screenshot.png" alt="VibeGuard CLI" width="600">
+</p>
+
 ---
 
 ## Commands
