@@ -9,12 +9,12 @@
  *   · Resolves the remote tracking branch for the current local branch.
  *   · Computes the true cryptographic merge-base via `git merge-base HEAD @{u}`
  *     (Fix #5) to avoid over-capturing unrelated team changes on nested branches.
- *   · Runs `git diff <merge-base>...HEAD` to get only the developer's own changes.
+ *   · Runs `git diff <merge-base>..HEAD` to get only the developer's own changes.
  *   · Parses the unified diff into structured DiffFile / DiffHunk / DiffLine objects.
  *   · Respects `.vibeguard.json` exclude_paths.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import type { DiffResult, DiffFile, DiffHunk, DiffLine, FileStatus } from "../core/types";
 import { readConfig } from "../core/config";
 
@@ -23,10 +23,14 @@ import { readConfig } from "../core/config";
 /**
  * Run a git command and return trimmed stdout.
  * Throws if the command fails.
+ *
+ * Security: arguments are passed directly to the git binary via execFileSync
+ * — never through a shell. Branch names or exclude patterns containing shell
+ * metacharacters (;, $(), backticks, globs) are treated as literal strings.
  */
 function git(args: string[], cwd?: string): string {
   try {
-    const result = execSync(`git ${args.join(" ")}`, {
+    const result = execFileSync("git", args, {
       cwd: cwd ?? process.cwd(),
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
@@ -49,8 +53,16 @@ function getUpstream(localBranch: string): string | null {
     const upstream = git(["rev-parse", "--abbrev-ref", `${localBranch}@{u}`]);
     return upstream || null;
   } catch {
-    // No upstream configured — fall back to origin/<branch>
-    return `origin/${localBranch}`;
+    // No upstream configured — fall back to origin/<branch>, but only if
+    // that ref actually exists. Otherwise return null so extractDiff() can
+    // surface the actionable "set the upstream" guidance.
+    const fallback = `origin/${localBranch}`;
+    try {
+      git(["rev-parse", "--verify", "--quiet", `${fallback}^{commit}`]);
+      return fallback;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -99,9 +111,9 @@ function getMergeBase(localBranch: string): string | null {
 /**
  * Run the diff between the merge-base and HEAD.
  *
- * Uses the three-dot syntax with the merge-base SHA to get exactly the changes
- * on the local branch since it diverged. Falls back to `@{u}...HEAD` if the
- * merge-base cannot be determined.
+ * Uses two-dot syntax (`<merge-base>..HEAD`) when the merge-base has already
+ * been resolved — three-dot would redundantly recompute it. Falls back to
+ * `@{u}...HEAD` if the merge-base cannot be determined.
  *
  * Fix #5: The merge-base is the cryptographic common ancestor, ensuring that
  * nested branches don't capture unrelated team changes in the diff.
@@ -114,18 +126,18 @@ function runDiff(
   // Compute the true merge-base for precise diff scoping.
   const mergeBase = getMergeBase(localBranch);
 
-  // Use merge-base if available, otherwise fall back to the upstream ref.
-  const baseRef = mergeBase ?? upstream;
+  // Two-dot when the merge-base is already resolved; three-dot to let git
+  // compute the merge-base when falling back to the upstream ref.
+  const range = mergeBase ? `${mergeBase}..HEAD` : `${upstream}...HEAD`;
 
-  const args = ["diff", "--unified=3", `${baseRef}...HEAD`];
+  const args = ["diff", "--unified=3", range];
 
-  // Add exclusions
-  for (const p of excludePaths) {
-    args.push(`--`, `:!${p}`);
-  }
-
-  // Use `-- .` to scope to the working tree, then exclusions filter it.
+  // Exactly one `--` separates options from pathspecs. Scope to the repo
+  // root, then add each exclusion as a `:!pattern` pathspec.
   args.push("--", ".");
+  for (const p of excludePaths) {
+    args.push(`:!${p}`);
+  }
 
   return git(args);
 }
@@ -348,15 +360,15 @@ export function getChangedFiles(localBranch: string): string[] {
 
   try {
     // Use merge-base for precise file list.
-    let baseRef: string;
+    let range: string;
     try {
       const mergeBase = git(["merge-base", "HEAD", `${localBranch}@{u}`]);
-      baseRef = (mergeBase && mergeBase.length === 40) ? mergeBase : upstream;
+      range = (mergeBase && mergeBase.length === 40) ? `${mergeBase}..HEAD` : `${upstream}...HEAD`;
     } catch {
-      baseRef = upstream;
+      range = `${upstream}...HEAD`;
     }
 
-    const raw = git(["diff", "--name-only", `${baseRef}...HEAD`]);
+    const raw = git(["diff", "--name-only", range]);
     return raw ? raw.split("\n").filter(Boolean) : [];
   } catch {
     return [];

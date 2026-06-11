@@ -1,6 +1,6 @@
 {
   "name": "vibeguard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "CLI-native adversarial local QA daemon — intercepts git pushes, extracts diffs, analyzes via custom LLMs, fires live exploits, and auto-generates security patches before code leaves your machine.",
   "main": "dist/cli/index.js",
   "bin": {

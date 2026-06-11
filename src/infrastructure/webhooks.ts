@@ -17,6 +17,7 @@
  */
 
 import type { TestReport, ExecutionResult } from "../core/types";
+import { VERSION } from "../core/version";
 import * as ui from "../cli/ui";
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ import * as ui from "../cli/ui";
 const WEBHOOK_TIMEOUT_MS = 2_000;
 
 /** User-agent sent with webhook requests. */
-const USER_AGENT = "VibeGuard/1.0.0 (Webhook Notification Engine)";
+const USER_AGENT = `VibeGuard/${VERSION} (Webhook Notification Engine)`;
 
 // ─── Public Types ───────────────────────────────────────────────────────────────
 

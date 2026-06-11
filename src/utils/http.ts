@@ -13,11 +13,12 @@
  */
 
 import type { AttackPayload, AuthSeedingConfig } from "../core/types";
+import { VERSION } from "../core/version";
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
 /** User-agent sent with test requests. */
-const USER_AGENT = "VibeGuard/0.9.0 (adversarial-payload-test)";
+const USER_AGENT = `VibeGuard/${VERSION} (adversarial-payload-test)`;
 
 // ─── Auth Resolution Context ─────────────────────────────────────────────────────
 
@@ -33,6 +34,24 @@ export interface AuthContext {
   cookie_name?: string;
   /** Custom query parameter name (for "query" auth_type). */
   query_param_name?: string;
+}
+
+/**
+ * Sanitize a token before it is placed into an HTTP header or URL.
+ *
+ * Tokens come from an external token_generation_command, so they must be
+ * treated as untrusted: trim whitespace and reject CR/LF characters, which
+ * would otherwise enable HTTP header injection.
+ */
+export function sanitizeToken(raw: string): string {
+  const token = raw.trim();
+  if (/[\r\n]/.test(token)) {
+    throw new Error(
+      "Auth token contains CR/LF characters — refusing to place it in HTTP headers. " +
+      "Check the output of auth_seeding.token_generation_command."
+    );
+  }
+  return token;
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────────
@@ -89,7 +108,7 @@ function buildGetRequest(
 
   // Inject auth query param if applicable.
   if (authContext && authContext.auth_type === "query" && authContext.query_param_name) {
-    params.append(authContext.query_param_name, authContext.token);
+    params.append(authContext.query_param_name, sanitizeToken(authContext.token));
   }
 
   const separator = payload.target_url.includes("?") ? "&" : "?";
@@ -169,20 +188,22 @@ function buildInit(
     headers["Content-Type"] = contentType;
   }
 
-  // Inject auth token based on auth_type.
+  // Inject auth token based on auth_type. The token is sanitized (trimmed,
+  // CR/LF rejected) before being placed in any header.
   if (authContext && authContext.token) {
+    const token = sanitizeToken(authContext.token);
     switch (authContext.auth_type) {
       case "bearer":
-        headers["Authorization"] = "Bearer " + authContext.token;
+        headers["Authorization"] = "Bearer " + token;
         break;
       case "header":
         if (authContext.header_name) {
-          headers[authContext.header_name] = authContext.token;
+          headers[authContext.header_name] = token;
         }
         break;
       case "cookie":
         if (authContext.cookie_name) {
-          headers["Cookie"] = authContext.cookie_name + "=" + authContext.token;
+          headers["Cookie"] = authContext.cookie_name + "=" + token;
         }
         break;
       // "query" is handled in buildGetRequest / URL construction.

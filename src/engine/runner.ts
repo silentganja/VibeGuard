@@ -31,7 +31,7 @@ import type {
   TestReport,
 } from "../core/types";
 import { evaluateResponse, isVulnerable } from "./assertion";
-import { buildRequest, AuthContext } from "../utils/http";
+import { buildRequest, sanitizeToken, AuthContext } from "../utils/http";
 import * as ui from "../cli/ui";
 
 // ─── Constants ───────────────────────────────────────────────────────────────────
@@ -137,11 +137,12 @@ function resolveAuthContext(config?: VibeGuardConfig): AuthContext | undefined {
 
   let token: string;
   try {
-    token = execSync(token_generation_command, {
+    // sanitizeToken trims and rejects CR/LF (HTTP header injection guard).
+    token = sanitizeToken(execSync(token_generation_command, {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: TOKEN_GEN_TIMEOUT_MS,
-    }).trim();
+    }));
 
     if (!token) {
       ui.warn("Auth token generation command returned empty output. Proceeding without auth.");

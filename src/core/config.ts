@@ -13,7 +13,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
-import type { VibeGuardConfig, RawConfig, DbConnectionConfig } from "./types";
+import type { VibeGuardConfig, RawConfig, DbConnectionConfig, AuthSeedingConfig } from "./types";
 import { isHeadless, detectCIPlatform, readConfigFromEnv, getMissingEnvConfigFields, ENV_KEYS } from "../compliance/ci";
 import * as ui from "../cli/ui";
 
@@ -346,14 +346,19 @@ export function readConfig(root?: string): VibeGuardConfig {
     throw new Error(`${CONFIG_FILENAME} must contain a JSON object.`);
   }
 
-  const errors = validateConfig(raw as RawConfig);
+  // Merge with defaults so config files written before newer fields existed
+  // (max_concurrent_requests, llm_max_retries, export_tests_*, ...) still
+  // load with every field populated.
+  const merged = { ...DEFAULT_CONFIG, ...(raw as RawConfig) };
+
+  const errors = validateConfig(merged);
   if (errors.length > 0) {
     throw new Error(
       `Invalid ${CONFIG_FILENAME}:\n  ${errors.join("\n  ")}`
     );
   }
 
-  return raw as VibeGuardConfig;
+  return merged as VibeGuardConfig;
 }
 
 // â”€â”€â”€ API Key Resolution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -462,9 +467,64 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
     }
   }
 
+  // ── Server Lifecycle (Fix #1) ─────────────────────────────────────────
+  ui.space();
+  ui.muted("─ Server Lifecycle (optional) ─");
+  ui.muted("  VibeGuard can auto-start your dev server if it's down, and stop it after.");
+  ui.space();
+
+  const serverStartCmd = await ask("Server start command (shell, or leave blank to skip)", DEFAULT_CONFIG.server_start_command ?? "");
+  let serverStopCmd = "";
+  if (serverStartCmd) {
+    serverStopCmd = await ask("Server stop command (shell, or leave blank to skip)", DEFAULT_CONFIG.server_stop_command ?? "");
+  }
+
+  // ── Concurrency (Fix #3) ──────────────────────────────────────────────
+  ui.space();
+  ui.muted("─ Concurrency (optional) ─");
+  ui.muted("  Max parallel HTTP requests during testing. 2-3 for lightweight servers.");
+  ui.space();
+
+  const maxConcurrentRaw = await ask("Max concurrent requests (1-50)", String(DEFAULT_CONFIG.max_concurrent_requests ?? 3));
+  const maxConcurrent = Math.max(1, Math.min(50, parseInt(maxConcurrentRaw, 10) || 3));
+
+  // ── Auth Seeding (Fix #2) ─────────────────────────────────────────────
+  ui.space();
+  ui.muted("─ Auth Seeding (optional) ─");
+  ui.muted("  If your endpoints require authentication, VibeGuard can negotiate");
+  ui.muted("  a sandbox token before firing test payloads (prevents false 401/403).");
+  ui.space();
+
+  const enableAuth = await ask("Configure auth seeding? (yes/no)", "no");
+  let authSeeding: VibeGuardConfig["auth_seeding"] = undefined;
+
+  if (enableAuth.toLowerCase() === "yes" || enableAuth.toLowerCase() === "y") {
+    const authType = await ask("Auth type (bearer | header | cookie | query)", "bearer");
+    const tokenCmd = await ask("Token generation command (shell — prints token to stdout)", "");
+
+    if (tokenCmd) {
+      authSeeding = {
+        auth_type: authType as AuthSeedingConfig["auth_type"],
+        token_generation_command: tokenCmd,
+      };
+
+      if (authType === "header") {
+        authSeeding.header_name = await ask("Header name for token", "X-API-Key");
+      } else if (authType === "cookie") {
+        authSeeding.cookie_name = await ask("Cookie name for token", "sandbox_token");
+      } else if (authType === "query") {
+        authSeeding.query_param_name = await ask("Query parameter name for token", "token");
+      }
+    }
+  }
+
   rl.close();
 
+  // Spread DEFAULT_CONFIG first so the generated file is complete: webhooks,
+  // export tests settings, server lifecycle commands, and concurrency are
+  // all written explicitly (with defaults) instead of being left undefined.
   const config: VibeGuardConfig = {
+    ...DEFAULT_CONFIG,
     llm_provider: provider as VibeGuardConfig["llm_provider"],
     llm_api_endpoint: endpoint,
     llm_api_key: apiKey,
@@ -472,12 +532,17 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
     target_local_url: targetUrl,
     exclude_paths: excludeRaw.split(",").map((s) => s.trim()).filter(Boolean),
     db_type: dbType as VibeGuardConfig["db_type"],
-    db_host: dbHost || undefined,
-    db_port: dbPort ? parseInt(dbPort, 10) : undefined,
-    db_user: dbUser || undefined,
-    db_pass: dbPass || undefined,
-    db_name: dbName || undefined,
-    db_sqlite_path: dbSqlitePath || undefined,
+    db_host: dbHost || DEFAULT_CONFIG.db_host,
+    db_port: dbPort ? parseInt(dbPort, 10) : DEFAULT_CONFIG.db_port,
+    db_user: dbUser || DEFAULT_CONFIG.db_user,
+    db_pass: dbPass || DEFAULT_CONFIG.db_pass,
+    db_name: dbName || DEFAULT_CONFIG.db_name,
+    db_sqlite_path: dbSqlitePath || DEFAULT_CONFIG.db_sqlite_path,
+    // Optional sections prompted above — override defaults with user input.
+    server_start_command: serverStartCmd || DEFAULT_CONFIG.server_start_command,
+    server_stop_command: serverStopCmd || DEFAULT_CONFIG.server_stop_command,
+    max_concurrent_requests: maxConcurrent,
+    auth_seeding: authSeeding,
   };
 
   // Validate before writing

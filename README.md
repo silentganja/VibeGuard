@@ -571,7 +571,10 @@ VibeGuard tried to auto-start your dev server but the command failed. Check `ser
 The `token_generation_command` in your `auth_seeding` config failed or returned empty. Verify the command prints a valid token to stdout.
 
 **"Connection refused" persists despite auto-start**
-The server may need more warmup time. Use a blocking start command (`docker-compose up -d --wait`) or increase `SERVER_START_WARMUP_MS` in the source.
+VibeGuard launches `server_start_command` as a detached process and polls the server for up to 60s. If it never becomes reachable, the server is likely failing to boot — run the command manually and check its output.
+
+**"commands ... have not been trusted on this machine"**
+The repo's `.vibeguard.json` defines shell commands that VibeGuard refuses to execute without your approval. Review and approve them once with `vibeguard trust`.
 
 **"max_concurrent_requests" validation error**
 Must be 1–50. Lightweight single-threaded servers: keep at 2–3. Multi-threaded (Go, Node cluster): 5–8 is safe.
@@ -585,6 +588,16 @@ Use `sudo npm link` or configure a user-level global prefix.
 **Push blocked but I want to bypass**
 `git push --no-verify` (not recommended — the vulnerabilities are real).
 </details>
+
+---
+
+## Security Notes
+
+`.vibeguard.json` is committed to the repository, and three of its fields are shell commands executed on your machine: `server_start_command`, `server_stop_command`, and `auth_seeding.token_generation_command`.
+
+- VibeGuard never executes these commands until you explicitly trust them. The first time they are seen — and any time they change — you must approve them (run `vibeguard trust`; approvals are cached in `~/.vibeguard/trusted.json`, outside the repo).
+- In non-interactive contexts (git hooks, CI) untrusted commands fail closed with guidance instead of executing.
+- Auth tokens produced by `token_generation_command` are trimmed and rejected if they contain CR/LF characters, preventing HTTP header injection.
 
 ---
 

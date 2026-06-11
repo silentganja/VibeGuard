@@ -14,8 +14,9 @@
  * Docker or their local backend before pushing.
  */
 
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import type { VibeGuardConfig, ServerCheckResult } from "../core/types";
+import { VERSION } from "../core/version";
 import * as ui from "../cli/ui";
 
 // ─── Constants ───────────────────────────────────────────────────────────────────
@@ -23,14 +24,14 @@ import * as ui from "../cli/ui";
 /** Maximum time to wait for the server to respond (milliseconds). */
 const CHECK_TIMEOUT_MS = 1500;
 
-/** Maximum time to wait for a server start command to complete (ms). */
+/** Maximum time to wait for the server to become reachable after start (ms). */
 const SERVER_START_TIMEOUT_MS = 60_000;
 
-/** Delay between server-start and first health probe (ms). */
-const SERVER_START_WARMUP_MS = 2_000;
+/** Interval between readiness probes after spawning the server (ms). */
+const SERVER_READY_POLL_MS = 1_000;
 
 /** HTTP user-agent string sent with the probe request. */
-const USER_AGENT = "VibeGuard/0.9.0 (pre-push connectivity check)";
+const USER_AGENT = `VibeGuard/${VERSION} (pre-push connectivity check)`;
 
 // ─── Public API ──────────────────────────────────────────────────────────────────
 
@@ -76,21 +77,29 @@ export async function checkServer(config: VibeGuardConfig): Promise<ServerCheckR
       };
     }
 
-    // Give the server a moment to spin up, then retry.
-    ui.muted(`Waiting ${SERVER_START_WARMUP_MS / 1000}s for server to warm up...`);
-    await sleep(SERVER_START_WARMUP_MS);
+    // Poll the health endpoint until the server is reachable or we time out.
+    // This supports non-daemonizing commands (e.g. `npm run dev`) that never
+    // exit on their own — we never wait on the child process, only on the
+    // server starting to answer.
+    ui.muted(`Waiting up to ${SERVER_START_TIMEOUT_MS / 1000}s for the server to become reachable...`);
 
-    const secondCheck = await runCheck(baseUrl);
-    if (secondCheck.reachable) {
-      ui.ok("Server is now reachable after auto-start.");
-      return secondCheck;
+    const deadline = Date.now() + SERVER_START_TIMEOUT_MS;
+    let lastCheck: ServerCheckResult | null = null;
+
+    while (Date.now() < deadline) {
+      await sleep(SERVER_READY_POLL_MS);
+      lastCheck = await runCheck(baseUrl);
+      if (lastCheck.reachable) {
+        ui.ok("Server is now reachable after auto-start.");
+        return lastCheck;
+      }
     }
 
     return {
       reachable: false,
-      statusCode: secondCheck.statusCode,
+      statusCode: lastCheck?.statusCode ?? null,
       latencyMs: null,
-      error: `Server started but still not reachable at ${baseUrl}: ${secondCheck.error ?? "unknown"}`,
+      error: `Server start command ran, but ${baseUrl} did not become reachable within ${SERVER_START_TIMEOUT_MS / 1000}s: ${lastCheck?.error ?? "unknown"}`,
     };
   }
 
@@ -220,21 +229,35 @@ async function probe(url: string, method: "HEAD" | "GET"): Promise<ProbeResult> 
 }
 
 /**
- * Execute the server start command via execSync.
- * Returns true if the command succeeded (exit code 0), false otherwise.
+ * Launch the server start command as a detached child process.
+ *
+ * Non-daemonizing commands (e.g. `npm run dev`) never exit, so we must not
+ * wait for the child synchronously — doing so caused a 60s hang followed by
+ * a misleading failure even when the server had started. The child is
+ * detached and unref'd so it keeps running independently; readiness is
+ * verified by polling the health endpoint in checkServer(). Cleanup is the
+ * responsibility of server_stop_command / stopServer().
+ *
+ * Returns true if the process could be spawned, false otherwise.
  */
 function startServer(command: string): boolean {
   try {
-    execSync(command, {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: SERVER_START_TIMEOUT_MS,
+    const child = spawn(command, {
+      shell: true,
+      detached: true,
+      stdio: "ignore",
     });
+
+    child.on("error", (err) => {
+      ui.warn("Server start command failed to spawn: " + err.message);
+    });
+
+    // Let the child outlive this process — it's the dev server.
+    child.unref();
     return true;
   } catch (err: unknown) {
-    const stderr = (err as { stderr?: string }).stderr ?? "";
     const msg = (err as Error).message ?? String(err);
-    ui.warn("Server start command failed: " + (stderr || msg));
+    ui.warn("Server start command failed: " + msg);
     return false;
   }
 }

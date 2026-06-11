@@ -32,11 +32,13 @@ import { renderFailureReport, renderSuccessReport, renderPhaseHeader, renderExpo
 import { isHeadless, getOutputMode } from "../compliance/ci";
 import { dispatchAlert, buildReport } from "../infrastructure/webhooks";
 import type { RunArgs, TargetTargets, TestReport, PatchResult } from "../core/types";
+import { VERSION as CORE_VERSION } from "../core/version";
+import { ensureTrusted, hasExecutableCommands, isTrusted, promptTrust } from "../core/trust";
 import { write as logWrite, writeSync as logWriteSync, initLogger } from "../utils/logger";
 
 // â”€â”€â”€ Version & Build Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const VERSION = "VibeGuard Engine v1.0.0 (2026)";
+const VERSION = `VibeGuard Engine v${CORE_VERSION} (2026)`;
 const BUILD_TAG = "Phase 15 Â· Notification Engine";
 
 // â”€â”€â”€ Help Text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -52,6 +54,7 @@ ${"\x1b[90m"}Commands:${"\x1b[0m"}
   ${"\x1b[97m"}install${"\x1b[0m"}     Install the git pre-push hook
   ${"\x1b[97m"}uninstall${"\x1b[0m"}   Remove the VibeGuard pre-push hook
   ${"\x1b[97m"}config${"\x1b[0m"}      Print current configuration
+  ${"\x1b[97m"}trust${"\x1b[0m"}       Review & approve shell commands defined in .vibeguard.json
   ${"\x1b[97m"}run${"\x1b[0m"}         [internal] Execute pre-push analysis
 
 ${"\x1b[90m"}Options:${"\x1b[0m"}
@@ -137,6 +140,37 @@ function handleUninstall(): void {
 function handleConfig(): void {
   try {
     printConfig();
+  } catch (err: unknown) {
+    ui.fail((err as Error).message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Review and approve the shell commands defined in .vibeguard.json
+ * (server lifecycle / token generation). Approval is cached per project
+ * and invalidated whenever the commands change.
+ */
+async function handleTrust(): Promise<void> {
+  try {
+    const config = readConfig();
+    const projectRoot = findProjectRoot() ?? process.cwd();
+
+    if (!hasExecutableCommands(config)) {
+      ui.muted("No executable commands defined in .vibeguard.json — nothing to trust.");
+      return;
+    }
+
+    if (isTrusted(projectRoot, config)) {
+      ui.ok("The current command set is already trusted for this project.");
+      return;
+    }
+
+    const approved = await promptTrust(projectRoot, config);
+    if (!approved) {
+      ui.muted("Commands were NOT trusted. VibeGuard will refuse to execute them.");
+      process.exit(1);
+    }
   } catch (err: unknown) {
     ui.fail((err as Error).message);
     process.exit(1);
@@ -252,6 +286,11 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
     }
 
     // â•â•â• Phase 3a: Connectivity Pre-flight Check â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Security trust gate: .vibeguard.json is committed to the repo and may
+    // define shell commands (server lifecycle, token generation). Never
+    // execute them without explicit, cached user approval.
+    await ensureTrusted(projectRoot, config);
+
     ui.space();
     ui.header("Connectivity Check");
     ui.action("Probing " + config.target_local_url + "...");
@@ -705,6 +744,10 @@ async function main(): Promise<void> {
 
     case "config":
       handleConfig();
+      break;
+
+    case "trust":
+      await handleTrust();
       break;
 
     case "run":
