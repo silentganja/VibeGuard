@@ -12,6 +12,7 @@ VibeGuard installs a pre-push Git hook that triggers automatically before every 
 
 ## Table of Contents
 
+- [What It Works With](#what-it-works-with)
 - [How It Works](#how-it-works)
 - [Model Requirements](#model-requirements)
 - [Installation](#installation)
@@ -24,6 +25,54 @@ VibeGuard installs a pre-push Git hook that triggers automatically before every 
 - [Packaging & Distribution](#packaging--distribution)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
+
+---
+
+## What It Works With
+
+VibeGuard is designed for **web applications with HTTP endpoints**. It works by firing live exploit payloads against your local dev server and judging the responses — so if your project doesn't serve HTTP, there's nothing to test.
+
+### Your project needs
+
+| Requirement | Why |
+|---|---|
+| **Git repository** | VibeGuard installs as a `pre-push` hook — it runs on `git push` |
+| **Local HTTP server** | Endpoints are probed and attacked live before code leaves your machine |
+| **An LLM** | Local (Ollama, LM Studio, vLLM) or cloud (OpenAI, Anthropic) — yours, not ours |
+
+### Languages
+
+The diff parser recognizes **50+ languages** for analysis. Any file extension below passes through to the LLM; everything else (CSS, docs, lockfiles, images) is filtered out:
+
+`php` `py` `rb` `go` `rs` `java` `kt` `scala` `c` `cpp` `cs` `swift` `pl` `lua` `r` `ex` `clj` `dart` `elm` `hs` `nim` `zig` `ts` `tsx` `js` `jsx` `vue` `svelte` `sh` `bash` `ps1` `sql` `yaml` `yml` `toml` — and more.
+
+### Frameworks
+
+VibeGuard auto-detects the framework and maps code files to the right URLs:
+
+| Framework | Detection |
+|---|---|
+| **Laravel** | `artisan` file in project root |
+| **Symfony** | `bin/console` file |
+| **Rails** | `Gemfile` |
+| **Django / Flask / FastAPI** | `requirements.txt`, `pyproject.toml`, `setup.py` |
+| **Next.js / Express / Node** | `package.json` |
+| **Go (Gin, Echo, Chi, etc.)** | `go.mod` |
+| **Phoenix** | `mix.exs` |
+| **Rust (Actix, Axum, Rocket)** | `Cargo.toml` |
+
+For everything else, VibeGuard falls back to **traditional URL mapping** — file paths map directly to URLs, with automatic detection of public web roots (`public/`, `www/`, `htdocs/`).
+
+### What VibeGuard can't test
+
+- **Mobile apps** (iOS/Android) — no HTTP server to attack
+- **Desktop applications** — same reason
+- **CLI tools** — no endpoints
+- **Libraries / SDKs** — unless you run a test server alongside
+- **Static websites** — no backend logic to exploit
+- **Non-HTTP services** — gRPC, WebSocket-only, message queues
+
+> If your project accepts HTTP requests and runs locally, VibeGuard can test it. The LLM handles the language-specific details — you don't need to configure anything per-language.
 
 ---
 
