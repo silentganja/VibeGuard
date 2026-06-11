@@ -38,8 +38,7 @@ import { write as logWrite, writeSync as logWriteSync, initLogger } from "../uti
 
 // â”€â”€â”€ Version & Build Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const VERSION = `VibeGuard Engine v${CORE_VERSION} (2026)`;
-const BUILD_TAG = "Phase 15 Â· Notification Engine";
+const VERSION = `VibeGuard v${CORE_VERSION}`;
 
 // â”€â”€â”€ Help Text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -67,7 +66,7 @@ ${"\x1b[90m"}Examples:${"\x1b[0m"}
   vibeguard config
   vibeguard --version
 
-${"\x1b[90m" + BUILD_TAG + " Â· " + VERSION + "\x1b[0m"}
+${"\x1b[90m" + VERSION + "\x1b[0m"}
 `;
 
 // â”€â”€â”€ Argument Parser (zero-dependency) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
