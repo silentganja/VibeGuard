@@ -81,10 +81,10 @@ export async function checkServer(config: VibeGuardConfig): Promise<ServerCheckR
     // Track async spawn failures so we can surface them quickly instead of
     // waiting the full 60s polling deadline for a dead process.
     let spawnError: string | null = null;
-    child.on("error", (err) => {
+    child.on("error", (err: NodeJS.ErrnoException) => {
       spawnError = "Server start command failed to spawn: " + err.message;
     });
-    child.on("exit", (code, signal) => {
+    child.on("exit", (code: number | null, signal: NodeJS.Signals | null) => {
       // A non-daemonizing command that exits early (e.g., bad binary name)
       // is a hard failure — the server will never become reachable.
       if (code !== null && code !== 0) {

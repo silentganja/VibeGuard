@@ -5,7 +5,7 @@
  * Every function is a single-call, single-line status emitter.
  *
  * Design language:
- *   ·  gray   — informational / context
+ *   -  gray   — informational / context
  *   →  white  — action in progress
  *   ✓  green  — success
  *   ✕  red    — failure / abort

@@ -4,20 +4,20 @@
  * Phase 8: Builds high-contrast, minimalist terminal reports on top of the
  * low-level ui.ts primitives. Implements structured layouts for:
  *
- *   Â· Section dividers with optional labels
- *   Â· Aligned key-value tables
- *   Â· Threat cards (vulnerability details)
- *   Â· Patch cards (Phase 7 remediation)
- *   Â· Failure report (blocked push â€” full forensic display)
- *   Â· Success shield (passed push â€” minimalist confirmation)
+ *   Â- Section dividers with optional labels
+ *   Â- Aligned key-value tables
+ *   Â- Threat cards (vulnerability details)
+ *   Â- Patch cards (Phase 7 remediation)
+ *   Â- Failure report (blocked push â€” full forensic display)
+ *   Â- Success shield (passed push â€” minimalist confirmation)
  *
  * Design language:
- *   Â· White/bold     â€” headers, severity labels, primary actions
- *   Â· Muted gray     â€” file paths, metadata, secondary info
- *   Â· Red            â€” vulnerability warnings, blocked status, attack vectors
- *   Â· Green          â€” success confirmation, patches
- *   Â· Yellow         â€” warnings, errors
- *   Â· Cyan           â€” HTTP methods, URLs
+ *   Â- White/bold     â€” headers, severity labels, primary actions
+ *   Â- Muted gray     â€” file paths, metadata, secondary info
+ *   Â- Red            â€” vulnerability warnings, blocked status, attack vectors
+ *   Â- Green          â€” success confirmation, patches
+ *   Â- Yellow         â€” warnings, errors
+ *   Â- Cyan           â€” HTTP methods, URLs
  *
  * All output uses standard ANSI escape codes. No box-drawing Unicode that
  * might break in restricted SSH or VS Code terminal sessions.
@@ -188,7 +188,7 @@ export function renderSuccessReport(): void {
   write(
     "  " + GREEN + BOLD + "âœ“" + R +
     "  " + WHITE + "VibeGuard" + R +
-    GRAY + " Â· All security checks passed Â· push allowed" + R
+    GRAY + " Â- All security checks passed Â- push allowed" + R
   );
   write(
     BOLD + WHITE + divider() + R
@@ -328,13 +328,13 @@ function renderSuccessReportCI(): void {
  * vulnerability.
  *
  * Layout:
- *   Threat #N/TOTAL  Â·  VECTOR  Â·  SEVERITY
+ *   Threat #N/TOTAL  Â-  VECTOR  Â-  SEVERITY
  *   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  *     File:       path/to/file.ext
  *     Endpoint:   METHOD http://...
  *     Payload:    key=malicious_value
  *     Signature:  matched error pattern
- *     Verdict:    VULNERABLE Â· HTTP 500 Â· 42ms
+ *     Verdict:    VULNERABLE Â- HTTP 500 Â- 42ms
  */
 function renderThreatCard(
   vr: ExecutionResult,
@@ -350,9 +350,9 @@ function renderThreatCard(
   // â”€â”€ Card Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   write(
     "  " + BOLD + WHITE + "Threat #" + String(num) + "/" + String(total) + R +
-    GRAY + "  Â·  " + R +
+    GRAY + "  Â-  " + R +
     RED + vr.payload.attack_type + R +
-    GRAY + "  Â·  " + R +
+    GRAY + "  Â-  " + R +
     sevColor + BOLD + severity + R
   );
   write(GRAY + "  " + "â”€".repeat(Math.min(TERM_WIDTH - 4, 74)) + R);
@@ -411,7 +411,7 @@ function renderThreatCard(
   write(
     GRAY + "    Verdict:" + R +
     "    " + RED + BOLD + "VULNERABLE" + R +
-    GRAY + " Â· HTTP " + statusCode + " Â· " + String(vr.latencyMs) + "ms" + R
+    GRAY + " Â- HTTP " + statusCode + " Â- " + String(vr.latencyMs) + "ms" + R
   );
 
   // Additional assertion details.

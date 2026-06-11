@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * VibeGuard Â· CLI Entry Point
+ * VibeGuard Â- CLI Entry Point
  *
  * Commands:
  *   vibeguard init       Interactive config wizard â€” creates .vibeguard.json
@@ -43,7 +43,7 @@ const VERSION = `VibeGuard v${CORE_VERSION}`;
 // â”€â”€â”€ Help Text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const USAGE = `
-${"\x1b[97m\x1b[1mVibeGuard\x1b[0m"} Â· CLI-native adversarial QA daemon
+${"\x1b[97m\x1b[1mVibeGuard\x1b[0m"} Â- CLI-native adversarial QA daemon
 
 ${"\x1b[90m"}Usage:${"\x1b[0m"}
   vibeguard ${"\x1b[97m"}<command>${"\x1b[0m"} [options]
