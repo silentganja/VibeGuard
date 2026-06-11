@@ -6,11 +6,11 @@
  * engine never delays the active Git hook or HTTP test runner.
  *
  * Design:
- *   · JSON Lines (.jsonl) format — each line is a self-contained JSON object.
- *   · Append-only file stream: .vibeguard/logs/engine_debug.log.
- *   · Log directory is auto-created on first write.
- *   · All writes use asynchronous fs.appendFile — zero blocking I/O.
- *   · Verbose payloads and network headers are piped here instead of stdout.
+ *   - JSON Lines (.jsonl) format — each line is a self-contained JSON object.
+ *   - Append-only file stream: .vibeguard/logs/engine_debug.log.
+ *   - Log directory is auto-created on first write.
+ *   - All writes use asynchronous fs.appendFile — zero blocking I/O.
+ *   - Verbose payloads and network headers are piped here instead of stdout.
  *
  * Zero runtime dependencies — uses only Node.js built-ins.
  */

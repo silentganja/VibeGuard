@@ -6,12 +6,12 @@
  * footprint ready for LLM consumption (Phase 2).
  *
  * Operations:
- *   · Resolves the remote tracking branch for the current local branch.
- *   · Computes the true cryptographic merge-base via `git merge-base HEAD @{u}`
+ *   - Resolves the remote tracking branch for the current local branch.
+ *   - Computes the true cryptographic merge-base via `git merge-base HEAD @{u}`
  *     (Fix #5) to avoid over-capturing unrelated team changes on nested branches.
- *   · Runs `git diff <merge-base>..HEAD` to get only the developer's own changes.
- *   · Parses the unified diff into structured DiffFile / DiffHunk / DiffLine objects.
- *   · Respects `.vibeguard.json` exclude_paths.
+ *   - Runs `git diff <merge-base>..HEAD` to get only the developer's own changes.
+ *   - Parses the unified diff into structured DiffFile / DiffHunk / DiffLine objects.
+ *   - Respects `.vibeguard.json` exclude_paths.
  */
 
 import { execFileSync } from "node:child_process";
@@ -148,10 +148,10 @@ function runDiff(
  * Parse a unified diff string into a structured DiffResult.
  *
  * Handles:
- *   · File headers: diff --git a/X b/Y
- *   · Extended headers: new file mode, deleted file mode, rename from/to
- *   · Hunks: @@ -oldStart,oldCount +newStart,newCount @@ context
- *   · Lines: +additions, -deletions, context
+ *   - File headers: diff --git a/X b/Y
+ *   - Extended headers: new file mode, deleted file mode, rename from/to
+ *   - Hunks: @@ -oldStart,oldCount +newStart,newCount @@ context
+ *   - Lines: +additions, -deletions, context
  */
 function parseDiff(raw: string): DiffResult {
   const files: DiffFile[] = [];

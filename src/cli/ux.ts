@@ -1,23 +1,23 @@
 /**
- * VibeGuard â€” Terminal UX & Presentation Engine
+ * VibeGuard --” Terminal UX & Presentation Engine
  *
  * Phase 8: Builds high-contrast, minimalist terminal reports on top of the
  * low-level ui.ts primitives. Implements structured layouts for:
  *
- *   Â- Section dividers with optional labels
- *   Â- Aligned key-value tables
- *   Â- Threat cards (vulnerability details)
- *   Â- Patch cards (Phase 7 remediation)
- *   Â- Failure report (blocked push â€” full forensic display)
- *   Â- Success shield (passed push â€” minimalist confirmation)
+ *   - Section dividers with optional labels
+ *   - Aligned key-value tables
+ *   - Threat cards (vulnerability details)
+ *   - Patch cards (Phase 7 remediation)
+ *   - Failure report (blocked push --” full forensic display)
+ *   - Success shield (passed push --” minimalist confirmation)
  *
  * Design language:
- *   Â- White/bold     â€” headers, severity labels, primary actions
- *   Â- Muted gray     â€” file paths, metadata, secondary info
- *   Â- Red            â€” vulnerability warnings, blocked status, attack vectors
- *   Â- Green          â€” success confirmation, patches
- *   Â- Yellow         â€” warnings, errors
- *   Â- Cyan           â€” HTTP methods, URLs
+ *   - White/bold     --” headers, severity labels, primary actions
+ *   - Muted gray     --” file paths, metadata, secondary info
+ *   - Red            --” vulnerability warnings, blocked status, attack vectors
+ *   - Green          --” success confirmation, patches
+ *   - Yellow         --” warnings, errors
+ *   - Cyan           --” HTTP methods, URLs
  *
  * All output uses standard ANSI escape codes. No box-drawing Unicode that
  * might break in restricted SSH or VS Code terminal sessions.
@@ -44,7 +44,7 @@ const YELLOW = "\x1b[33m";
 const CYAN = "\x1b[36m";
 const R = "\x1b[0m";
 
-/** Terminal width â€” clamped to a safe maximum for readability. */
+/** Terminal width --” clamped to a safe maximum for readability. */
 const TERM_WIDTH = Math.min(process.stdout.columns ?? 80, 100);
 
 // â”€â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -83,7 +83,7 @@ export function renderFailureReport(
   write(divider());
   write(
     BOLD + WHITE + "  PUSH BLOCKED" + R +
-    GRAY + " â€” Security Vulnerability Detected" + R
+    GRAY + " --” Security Vulnerability Detected" + R
   );
   write(divider());
   write("");
@@ -171,7 +171,7 @@ export function renderFailureReport(
 /**
  * Render the minimalist success confirmation when all checks pass.
  *
- * Keeps the footprint tiny â€” the user's focus returns instantly to the
+ * Keeps the footprint tiny --” the user's focus returns instantly to the
  * native git push stream.
  */
 export function renderSuccessReport(): void {
@@ -188,7 +188,7 @@ export function renderSuccessReport(): void {
   write(
     "  " + GREEN + BOLD + "âœ“" + R +
     "  " + WHITE + "VibeGuard" + R +
-    GRAY + " Â- All security checks passed Â- push allowed" + R
+    GRAY + " - All security checks passed - push allowed" + R
   );
   write(
     BOLD + WHITE + divider() + R
@@ -202,11 +202,11 @@ export function renderSuccessReport(): void {
  * Render a machine-readable failure report for CI/CD pipeline logs.
  *
  * Outputs a clean, parseable text breakdown of every vulnerability.
- * No ANSI colors, no box drawing â€” plain text suitable for log archival,
+ * No ANSI colors, no box drawing --” plain text suitable for log archival,
  * grep filtering, and CI pipeline log viewers.
  *
  * Format:
- *   [VibeGuard] PUSH BLOCKED â€” 2 vulnerability/ies confirmed
+ *   [VibeGuard] PUSH BLOCKED --” 2 vulnerability/ies confirmed
  *   [VibeGuard] Platform: GitHub Actions
  *   [VibeGuard]
  *   [VibeGuard] THREAT 1/2 | sql_injection | HIGH
@@ -216,7 +216,7 @@ export function renderSuccessReport(): void {
  *   [VibeGuard]   Signature: You have an error in your SQL syntax...
  *   [VibeGuard]   Status:  500 | 42ms
  *   [VibeGuard]
- *   [VibeGuard] RESULT: 2 vulnerability/ies found â€” build failed
+ *   [VibeGuard] RESULT: 2 vulnerability/ies found --” build failed
  */
 function renderFailureReportCI(
   verdict: AnalysisVerdict,
@@ -229,7 +229,7 @@ function renderFailureReportCI(
   const successPatches = patchResults.filter((p) => p.success);
 
   // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  writePlain("[VibeGuard] PUSH BLOCKED â€” " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies confirmed");
+  writePlain("[VibeGuard] PUSH BLOCKED --” " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies confirmed");
   writePlain("[VibeGuard] Platform: " + platform);
   writePlain("[VibeGuard]");
 
@@ -308,17 +308,17 @@ function renderFailureReportCI(
   }
 
   // â”€â”€ Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  writePlain("[VibeGuard] RESULT: " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies found â€” build failed");
+  writePlain("[VibeGuard] RESULT: " + String(testReport.vulnerabilitiesFound) + " vulnerability/ies found --” build failed");
   writePlain("[VibeGuard] " + String(testReport.testsPassed) + " passed | " + String(testReport.testsErrored) + " errored | " + String(testReport.vulnerabilitiesFound) + " vulnerable");
 }
 
 /**
  * Render a machine-readable success message for CI/CD pipeline logs.
  *
- * Minimal â€” one line confirming the security scan passed.
+ * Minimal --” one line confirming the security scan passed.
  */
 function renderSuccessReportCI(): void {
-  writePlain("[VibeGuard] PASS â€” All security checks passed.");
+  writePlain("[VibeGuard] PASS --” All security checks passed.");
 }
 
 // â”€â”€â”€ Threat Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -328,13 +328,13 @@ function renderSuccessReportCI(): void {
  * vulnerability.
  *
  * Layout:
- *   Threat #N/TOTAL  Â-  VECTOR  Â-  SEVERITY
+ *   Threat #N/TOTAL  -  VECTOR  -  SEVERITY
  *   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  *     File:       path/to/file.ext
  *     Endpoint:   METHOD http://...
  *     Payload:    key=malicious_value
  *     Signature:  matched error pattern
- *     Verdict:    VULNERABLE Â- HTTP 500 Â- 42ms
+ *     Verdict:    VULNERABLE - HTTP 500 - 42ms
  */
 function renderThreatCard(
   vr: ExecutionResult,
@@ -350,9 +350,9 @@ function renderThreatCard(
   // â”€â”€ Card Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   write(
     "  " + BOLD + WHITE + "Threat #" + String(num) + "/" + String(total) + R +
-    GRAY + "  Â-  " + R +
+    GRAY + "  -  " + R +
     RED + vr.payload.attack_type + R +
-    GRAY + "  Â-  " + R +
+    GRAY + "  -  " + R +
     sevColor + BOLD + severity + R
   );
   write(GRAY + "  " + "â”€".repeat(Math.min(TERM_WIDTH - 4, 74)) + R);
@@ -411,7 +411,7 @@ function renderThreatCard(
   write(
     GRAY + "    Verdict:" + R +
     "    " + RED + BOLD + "VULNERABLE" + R +
-    GRAY + " Â- HTTP " + statusCode + " Â- " + String(vr.latencyMs) + "ms" + R
+    GRAY + " - HTTP " + statusCode + " - " + String(vr.latencyMs) + "ms" + R
   );
 
   // Additional assertion details.

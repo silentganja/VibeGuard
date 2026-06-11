@@ -9,13 +9,13 @@
  * Design:
  *   - NEVER overwrites the developer's original source file automatically.
  *   - Outputs patch files to .vibeguard/patches/<filename>.patch.
- *   - Uses the SAME LLM API client pattern as Phase 2 (llm.ts) â€” callLLM()
+ *   - Uses the SAME LLM API client pattern as Phase 2 (llm.ts) --” callLLM()
  *     with a custom Hardened Systems Security Engineer system prompt.
  *   - Produces standard unified diff format for easy review and application.
  *   - Fail-safe: if the LLM is unreachable or returns invalid data, the
  *     patch generation fails gracefully and the pipeline continues.
  *
- * Zero runtime dependencies â€” uses only Node.js built-ins.
+ * Zero runtime dependencies --” uses only Node.js built-ins.
  */
 
 import * as fs from "node:fs";
@@ -45,13 +45,13 @@ const MAX_SOURCE_FILE_CHARS = 100_000;
 
 // â”€â”€â”€ Hardened Systems Security Engineer System Prompt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const REMEDIATION_SYSTEM_PROMPT = `You are a **Hardened Systems Security Engineer** â€” a principal-level application security expert specializing in code remediation. Your purpose is to analyze vulnerable code that failed a live adversarial security test, understand the exploit that broke through, and produce a surgically precise fix.
+const REMEDIATION_SYSTEM_PROMPT = `You are a **Hardened Systems Security Engineer** --” a principal-level application security expert specializing in code remediation. Your purpose is to analyze vulnerable code that failed a live adversarial security test, understand the exploit that broke through, and produce a surgically precise fix.
 
 ## Your Task
 
 You will receive:
 1. The **complete source code** of the file that failed a security test.
-2. The **exploit context** â€” what payload was sent, what vulnerability was flagged, what response signature confirmed the breach.
+2. The **exploit context** --” what payload was sent, what vulnerability was flagged, what response signature confirmed the breach.
 
 You must:
 1. Understand WHY the exploit succeeded by analyzing the vulnerable code path.
@@ -69,7 +69,7 @@ You must:
 ### auth_bypass / privilege_escalation
 - Add proper **authorization checks** before sensitive operations.
 - Verify session tokens, user roles, or ownership before returning data.
-- Return HTTP 401/403 for unauthorized access â€” never silently return partial data.
+- Return HTTP 401/403 for unauthorized access --” never silently return partial data.
 - Validate that the authenticated user has permission for the specific resource being accessed.
 
 ### xss
@@ -107,9 +107,9 @@ You must:
 
 ## Rules
 
-1. **Fix the root cause, not the symptom.** Do not just add a try/catch wrapper â€” fix the vulnerable pattern itself.
+1. **Fix the root cause, not the symptom.** Do not just add a try/catch wrapper --” fix the vulnerable pattern itself.
 2. **Preserve functionality.** The code must still work correctly after the fix. Do not change behavior unless it is inherently insecure.
-3. **Return the COMPLETE file.** Every line of the source file must be present in patched_code â€” unchanged lines included.
+3. **Return the COMPLETE file.** Every line of the source file must be present in patched_code --” unchanged lines included.
 4. **Be surgical.** Change only the lines necessary to fix the vulnerability. Do not rewrite working code, do not reformat, do not reorganize imports unless the fix requires it.
 5. **Comment your changes.** Add brief inline comments above changed lines explaining the security fix (e.g. "// FIX: Use parameterized query to prevent SQL injection").
 6. **If you cannot determine a fix**, set remediation_applied to false and explain why. This is better than guessing.
@@ -150,7 +150,7 @@ Remember: you are the last line of defense before vulnerable code reaches produc
  *   5. Generates a unified diff between the original and patched code.
  *   6. Writes the patch to .vibeguard/patches/<filename>.patch.
  *
- * Patches are NEVER applied automatically â€” they are written to disk for the
+ * Patches are NEVER applied automatically --” they are written to disk for the
  * developer to review and apply manually.
  *
  * @param config      - Validated VibeGuard configuration (for LLM access).
@@ -288,7 +288,7 @@ async function generateOnePatch(
       patchContent: null,
       vulnerabilityType: remediation.vulnerability_type,
       explanation: remediation.explanation,
-      error: "Generated patched code is identical to original â€” no changes to apply.",
+      error: "Generated patched code is identical to original --” no changes to apply.",
     };
   }
 
@@ -433,7 +433,7 @@ function buildRemediationUserMessage(context: ExploitContext): string {
   lines.push(context.source_code);
   lines.push("```");
   lines.push("");
-  lines.push("Return the JSON remediation now. Remember: no preamble, no markdown fences â€” pure JSON only.");
+  lines.push("Return the JSON remediation now. Remember: no preamble, no markdown fences --” pure JSON only.");
 
   return lines.join("\n");
 }
@@ -443,7 +443,7 @@ function buildRemediationUserMessage(context: ExploitContext): string {
 /**
  * Parse the LLM's JSON remediation response.
  *
- * Uses the same robust parsing logic as llm.ts â€” handles markdown-fenced JSON,
+ * Uses the same robust parsing logic as llm.ts --” handles markdown-fenced JSON,
  * bare JSON, and JSON with surrounding text.
  */
 function parseRemediationResponse(raw: string): RemediationResult {
@@ -526,7 +526,7 @@ function ensureDir(dir: string): void {
   try {
     fs.mkdirSync(dir, { recursive: true });
   } catch {
-    // Directory already exists or cannot be created â€” ignore.
+    // Directory already exists or cannot be created --” ignore.
   }
 }
 
@@ -580,7 +580,7 @@ export function formatPatchSummary(results: PatchResult[]): string {
       "Patches NOT generated: " + String(failed.length) + " file(s)"
     );
     for (const r of failed) {
-      lines.push("  âœ• " + (r.vulnerabilityType ?? "unknown") + " â€” " + (r.error ?? "Unknown error"));
+      lines.push("  âœ• " + (r.vulnerabilityType ?? "unknown") + " --” " + (r.error ?? "Unknown error"));
     }
   }
 

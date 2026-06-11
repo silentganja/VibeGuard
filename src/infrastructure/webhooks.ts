@@ -5,12 +5,12 @@
  * Microsoft Teams when vulnerabilities are detected during headless CI/CD runs.
  *
  * Design:
- *   · Zero external SDKs — native `fetch` to standard incoming webhook URLs.
- *   · Three platform-specific JSON formatters (Discord embeds, Slack blocks,
+ *   - Zero external SDKs — native `fetch` to standard incoming webhook URLs.
+ *   - Three platform-specific JSON formatters (Discord embeds, Slack blocks,
  *     Teams Adaptive Cards).
- *   · Parallel dispatch via Promise.allSettled — one slow webhook never blocks
+ *   - Parallel dispatch via Promise.allSettled — one slow webhook never blocks
  *     the pipeline exit.
- *   · Graceful failures — a webhook error logs a warning but never alters the
+ *   - Graceful failures — a webhook error logs a warning but never alters the
  *     exit code. The primary goal is blocking the push; the alert is secondary.
  *
  * Zero runtime dependencies — uses only Node.js built-in fetch.
@@ -194,10 +194,10 @@ export function buildReport(
  * Build a Discord webhook payload using the `embeds` format.
  *
  * Discord embed structure:
- *   · Red color (#ff0000) for high-severity security alert.
- *   · Title with vulnerability count and project/branch info.
- *   · Fields for each confirmed vulnerability (file, URL, vector, payload).
- *   · Footer with timestamp.
+ *   - Red color (#ff0000) for high-severity security alert.
+ *   - Title with vulnerability count and project/branch info.
+ *   - Fields for each confirmed vulnerability (file, URL, vector, payload).
+ *   - Footer with timestamp.
  */
 function formatDiscordPayload(report: WebhookReport): Record<string, unknown> {
   const fields: Array<Record<string, unknown>> = [];
@@ -205,11 +205,11 @@ function formatDiscordPayload(report: WebhookReport): Record<string, unknown> {
   for (const f of report.findings.slice(0, 10)) {
     // Discord limits embeds to 25 fields; we cap at 10 for readability.
     fields.push({
-      name: f.vulnerabilityType.toUpperCase() + " · " + f.method + " " + f.targetUrl,
+      name: f.vulnerabilityType.toUpperCase() + " - " + f.method + " " + f.targetUrl,
       value: [
         "**File:** " + f.file,
         "**Payload:** `" + f.payload + "`",
-        "**Status:** " + f.statusCode + " · " + f.latencyMs,
+        "**Status:** " + f.statusCode + " - " + f.latencyMs,
         "**Detail:** " + f.assertionDetail.slice(0, 150),
       ].join("\n"),
       inline: false,
@@ -232,12 +232,12 @@ function formatDiscordPayload(report: WebhookReport): Record<string, unknown> {
         description: [
           "**Project:** " + report.project,
           "**Branch:** " + report.branch,
-          "**Tests:** " + String(report.totalTests) + " executed · " + String(report.testsPassed) + " passed · " + String(report.vulnerabilityCount) + " vulnerable",
+          "**Tests:** " + String(report.totalTests) + " executed - " + String(report.testsPassed) + " passed - " + String(report.vulnerabilityCount) + " vulnerable",
         ].join("\n"),
         color: 0xff0000, // Red
         fields,
         footer: {
-          text: "VibeGuard · " + new Date().toISOString(),
+          text: "VibeGuard - " + new Date().toISOString(),
         },
       },
     ],
@@ -250,11 +250,11 @@ function formatDiscordPayload(report: WebhookReport): Record<string, unknown> {
  * Build a Slack webhook payload using the `blocks` layout.
  *
  * Slack Block Kit structure:
- *   · Header block with alert title.
- *   · Context block with project/branch/stats.
- *   · Divider.
- *   · Section blocks for each vulnerability (markdown with code blocks).
- *   · Context footer with timestamp.
+ *   - Header block with alert title.
+ *   - Context block with project/branch/stats.
+ *   - Divider.
+ *   - Section blocks for each vulnerability (markdown with code blocks).
+ *   - Context footer with timestamp.
  */
 function formatSlackPayload(report: WebhookReport): Record<string, unknown> {
   const blocks: Array<Record<string, unknown>> = [];
@@ -276,7 +276,7 @@ function formatSlackPayload(report: WebhookReport): Record<string, unknown> {
       type: "mrkdwn",
       text: [
         "*Project:* " + report.project + "  |  *Branch:* " + report.branch,
-        "*Tests:* " + String(report.totalTests) + " executed · " + String(report.testsPassed) + " passed · " + String(report.vulnerabilityCount) + " vulnerable",
+        "*Tests:* " + String(report.totalTests) + " executed - " + String(report.testsPassed) + " passed - " + String(report.vulnerabilityCount) + " vulnerable",
       ].join("\n"),
     },
   });
@@ -290,7 +290,7 @@ function formatSlackPayload(report: WebhookReport): Record<string, unknown> {
       text: {
         type: "mrkdwn",
         text: [
-          "*" + f.vulnerabilityType.toUpperCase() + "*  ·  " + f.method + " " + f.targetUrl,
+          "*" + f.vulnerabilityType.toUpperCase() + "*  -  " + f.method + " " + f.targetUrl,
           "",
           "```" + f.payload + "```",
           "_File:_ " + f.file + "  |  _Status:_ " + f.statusCode + "  |  " + f.latencyMs,
@@ -318,7 +318,7 @@ function formatSlackPayload(report: WebhookReport): Record<string, unknown> {
     elements: [
       {
         type: "mrkdwn",
-        text: "VibeGuard · " + new Date().toISOString(),
+        text: "VibeGuard - " + new Date().toISOString(),
       },
     ],
   });
@@ -332,9 +332,9 @@ function formatSlackPayload(report: WebhookReport): Record<string, unknown> {
  * Build a Microsoft Teams webhook payload using the Adaptive Card format.
  *
  * Teams Adaptive Card structure:
- *   · Red accent color for critical alert.
- *   · Title + fact set for project/branch/stats.
- *   · Container items for each vulnerability (fact set per finding).
+ *   - Red accent color for critical alert.
+ *   - Title + fact set for project/branch/stats.
+ *   - Container items for each vulnerability (fact set per finding).
  */
 function formatTeamsPayload(report: WebhookReport): Record<string, unknown> {
   const facts: Array<Record<string, string>> = [
@@ -368,7 +368,7 @@ function formatTeamsPayload(report: WebhookReport): Record<string, unknown> {
         { title: "Endpoint", value: f.method + " " + f.targetUrl },
         { title: "File", value: f.file },
         { title: "Payload", value: f.payload.length > 120 ? f.payload.slice(0, 117) + "..." : f.payload },
-        { title: "Status", value: f.statusCode + " · " + f.latencyMs },
+        { title: "Status", value: f.statusCode + " - " + f.latencyMs },
       ],
     });
     bodyItems.push({

@@ -1,5 +1,5 @@
 /**
- * VibeGuard â€” Git Hook Installer
+ * VibeGuard --” Git Hook Installer
  *
  * Writes a native `.git/hooks/pre-push` script into the target repository.
  * The script is a bash script that:
@@ -30,9 +30,9 @@ import { ensureLogsGitignored } from "../utils/logger";
 function generateBashHook(vibeguardEntry: string): string {
   return `#!/usr/bin/env bash
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-#  VibeGuard Â· Pre-Push Hook
+#  VibeGuard - Pre-Push Hook
 #  Installed by: vibeguard install
-#  DO NOT EDIT MANUALLY â€” run \`vibeguard install\` to regenerate.
+#  DO NOT EDIT MANUALLY --” run \`vibeguard install\` to regenerate.
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 set -euo pipefail
 
@@ -41,7 +41,7 @@ VIBEGUARD="${vibeguardEntry}"
 # â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 echo ""
 echo -e "\\x1b[2mâ•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®\\x1b[0m"
-echo -e "\\x1b[2mâ”‚\\x1b[0m  \\x1b[97mVibeGuard\\x1b[0m Â· Pre-Push Analysis           \\x1b[2mâ”‚\\x1b[0m"
+echo -e "\\x1b[2mâ”‚\\x1b[0m  \\x1b[97mVibeGuard\\x1b[0m - Pre-Push Analysis           \\x1b[2mâ”‚\\x1b[0m"
 echo -e "\\x1b[2mâ•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¯\\x1b[0m"
 echo ""
 
@@ -70,7 +70,7 @@ if [ \$FAILED -eq 0 ]; then
   echo -e "\\x1b[32mâœ“  VibeGuard analysis passed\\x1b[0m"
   exit 0
 else
-  echo -e "\\x1b[31mâœ•  Push aborted â€” VibeGuard analysis failed\\x1b[0m"
+  echo -e "\\x1b[31mâœ•  Push aborted --” VibeGuard analysis failed\\x1b[0m"
   exit 1
 fi
 `;
@@ -92,16 +92,16 @@ function generatePowerShellHook(vibeguardEntry: string): string {
 
   return [
     "# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
-    "#  VibeGuard Â· Pre-Push Hook (PowerShell)",
+    "#  VibeGuard - Pre-Push Hook (PowerShell)",
     "#  Installed by: vibeguard install",
-    "#  DO NOT EDIT MANUALLY â€” run `vibeguard install` to regenerate.",
+    "#  DO NOT EDIT MANUALLY --” run `vibeguard install` to regenerate.",
     "# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
     "",
     '$ErrorActionPreference = "Stop"',
     "",
     'Write-Host ""',
     `Write-Host ("${e}[2mâ•­â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•®${e}[0m")`,
-    `Write-Host ("${e}[2mâ”‚${e}[0m  ${e}[97mVibeGuard${e}[0m Â· Pre-Push Analysis           ${e}[2mâ”‚${e}[0m")`,
+    `Write-Host ("${e}[2mâ”‚${e}[0m  ${e}[97mVibeGuard${e}[0m - Pre-Push Analysis           ${e}[2mâ”‚${e}[0m")`,
     `Write-Host ("${e}[2mâ•°â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â•¯${e}[0m")`,
     'Write-Host ""',
     "",
@@ -134,7 +134,7 @@ function generatePowerShellHook(vibeguardEntry: string): string {
     `  Write-Host ("${e}[32mâœ“  VibeGuard analysis passed${e}[0m")`,
     "  exit 0",
     "} else {",
-    `  Write-Host ("${e}[31mâœ•  Push aborted â€” VibeGuard analysis failed${e}[0m")`,
+    `  Write-Host ("${e}[31mâœ•  Push aborted --” VibeGuard analysis failed${e}[0m")`,
     "  exit 1",
     "}",
     "",
@@ -154,11 +154,11 @@ function generatePowerShellHook(vibeguardEntry: string): string {
  */
 export function installHook(): void {
   // In headless CI/CD environments, skip hook installation gracefully.
-  // Git hooks are a local development feature â€” they have no meaning in
+  // Git hooks are a local development feature --” they have no meaning in
   // ephemeral CI build containers where .git may not even exist.
   if (isHeadless()) {
     const platform = detectCIPlatform() ?? "headless environment";
-    ui.muted("Skipping hook installation â€” running in " + platform + ".");
+    ui.muted("Skipping hook installation --” running in " + platform + ".");
     ui.muted("VibeGuard is invoked directly via `vibeguard run` in CI pipelines.");
     return;
   }
@@ -242,7 +242,7 @@ export function installHook(): void {
 export function uninstallHook(): void {
   // In headless CI/CD environments, there are no hooks to uninstall.
   if (isHeadless()) {
-    ui.muted("Hook uninstall skipped â€” running in headless/CI environment.");
+    ui.muted("Hook uninstall skipped --” running in headless/CI environment.");
     return;
   }
 

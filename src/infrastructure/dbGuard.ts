@@ -4,7 +4,7 @@
  * Handles state isolation and recovery during adversarial payload testing.
  * Before test payloads are fired (Phase 5/6), this module captures the current
  * state of affected database tables. After testing concludes, it restores them
- * to their pre-test condition â€” regardless of whether tests passed or failed.
+ * to their pre-test condition --” regardless of whether tests passed or failed.
  *
  * Strategies:
  *   SQLite:        Binary file copy â†’ restore from copy.
@@ -15,9 +15,9 @@
  * Table Discovery:
  *   Scans the filtered diff for SQL keywords (FROM, UPDATE, INSERT INTO, etc.)
  *   to identify which tables are referenced by the changed code. Only those
- *   tables are snapped â€” minimizing dump size and restore time.
+ *   tables are snapped --” minimizing dump size and restore time.
  *
- * Zero runtime dependencies â€” uses native CLI tools (mysqldump, pg_dump, etc.)
+ * Zero runtime dependencies --” uses native CLI tools (mysqldump, pg_dump, etc.)
  * and Node.js built-in modules only.
  */
 
@@ -67,7 +67,7 @@ const TABLE_DISCOVERY_PATTERNS: Array<{ pattern: RegExp; operation: string }> = 
   { pattern: /REPLACE\s+INTO\s+[`"]?(\w+)[`"]?/gi, operation: "REPLACE" },
 ];
 
-/** Table names to ignore â€” common SQL keywords that aren't actual tables. */
+/** Table names to ignore --” common SQL keywords that aren't actual tables. */
 const IGNORED_TABLES = new Set([
   "IF", "EXISTS", "NOT", "NULL", "DEFAULT", "SET",
   "WHERE", "AND", "OR", "VALUES", "ORDER", "GROUP",
@@ -134,7 +134,7 @@ export function capture(config: VibeGuardConfig, filteredDiff: FilteredDiff): Sn
           artifactPath: null,
           tables: [],
           strategy: "none",
-          summary: "Unknown db_type â€” no snapshot taken.",
+          summary: "Unknown db_type --” no snapshot taken.",
           error: null,
         };
     }
@@ -144,7 +144,7 @@ export function capture(config: VibeGuardConfig, filteredDiff: FilteredDiff): Sn
       artifactPath: null,
       tables,
       strategy: db.type === "sqlite" ? "binary_copy" : "sql_dump",
-      summary: "Snapshot failed â€” see error field.",
+      summary: "Snapshot failed --” see error field.",
       error: (err as Error).message,
     };
   }
@@ -153,7 +153,7 @@ export function capture(config: VibeGuardConfig, filteredDiff: FilteredDiff): Sn
 /**
  * Restore database state from the snapshot artifact.
  *
- * Called AFTER Phase 5/6 payloads conclude â€” regardless of whether tests
+ * Called AFTER Phase 5/6 payloads conclude --” regardless of whether tests
  * passed or failed. This ensures side effects from adversarial payloads
  * are fully reversed.
  *
@@ -167,7 +167,7 @@ export function restore(config: VibeGuardConfig): RestoreResult {
     return {
       success: true,
       strategy: "none",
-      summary: "DB guarding disabled â€” nothing to restore.",
+      summary: "DB guarding disabled --” nothing to restore.",
       error: null,
     };
   }
@@ -187,7 +187,7 @@ export function restore(config: VibeGuardConfig): RestoreResult {
         return {
           success: true,
           strategy: "none",
-          summary: "Unknown db_type â€” nothing to restore.",
+          summary: "Unknown db_type --” nothing to restore.",
           error: null,
         };
     }
@@ -195,7 +195,7 @@ export function restore(config: VibeGuardConfig): RestoreResult {
     return {
       success: false,
       strategy: db.type === "sqlite" ? "binary_copy" : "sql_restore",
-      summary: "Restore failed â€” manual intervention may be required. See error field.",
+      summary: "Restore failed --” manual intervention may be required. See error field.",
       error: (err as Error).message,
     };
   }
@@ -216,7 +216,7 @@ function discoverTables(diff: FilteredDiff): DiscoveredTable[] {
   for (const file of diff.files) {
     for (const hunk of file.hunks) {
       for (const line of hunk.lines) {
-        // Only scan added and context lines â€” deleted code is no longer active.
+        // Only scan added and context lines --” deleted code is no longer active.
         if (line.type === "delete") continue;
 
         for (const { pattern, operation } of TABLE_DISCOVERY_PATTERNS) {
@@ -293,7 +293,7 @@ function sqliteRestore(sqlitePath: string, tmpDir: string): RestoreResult {
     return {
       success: true,
       strategy: "binary_copy",
-      summary: "No SQLite backup found at " + backupPath + " â€” nothing to restore.",
+      summary: "No SQLite backup found at " + backupPath + " --” nothing to restore.",
       error: null,
     };
   }
@@ -304,12 +304,12 @@ function sqliteRestore(sqlitePath: string, tmpDir: string): RestoreResult {
   return {
     success: true,
     strategy: "binary_copy",
-    summary: "SQLite database restored from " + backupPath + " â€” backup deleted.",
+    summary: "SQLite database restored from " + backupPath + " --” backup deleted.",
     error: null,
   };
 }
 
-/** Resolve a SQLite path â€” relative paths are resolved from the project root. */
+/** Resolve a SQLite path --” relative paths are resolved from the project root. */
 function resolveSqlitePath(raw: string): string {
   if (path.isAbsolute(raw)) return raw;
   const root = findProjectRoot() ?? process.cwd();
@@ -354,7 +354,7 @@ function mysqlRestore(db: DbConnectionConfig, tmpDir: string): RestoreResult {
     return {
       success: true,
       strategy: "sql_restore",
-      summary: "No MySQL dump found at " + dumpPath + " â€” nothing to restore.",
+      summary: "No MySQL dump found at " + dumpPath + " --” nothing to restore.",
       error: null,
     };
   }
@@ -368,7 +368,7 @@ function mysqlRestore(db: DbConnectionConfig, tmpDir: string): RestoreResult {
   return {
     success: true,
     strategy: "sql_restore",
-    summary: "MySQL tables restored from " + dumpPath + " â€” dump file deleted.",
+    summary: "MySQL tables restored from " + dumpPath + " --” dump file deleted.",
     error: null,
   };
 }
@@ -444,7 +444,7 @@ function postgresRestore(db: DbConnectionConfig, tmpDir: string): RestoreResult 
     return {
       success: true,
       strategy: "sql_restore",
-      summary: "No PostgreSQL dump found at " + dumpPath + " â€” nothing to restore.",
+      summary: "No PostgreSQL dump found at " + dumpPath + " --” nothing to restore.",
       error: null,
     };
   }
@@ -459,7 +459,7 @@ function postgresRestore(db: DbConnectionConfig, tmpDir: string): RestoreResult 
   return {
     success: true,
     strategy: "sql_restore",
-    summary: "PostgreSQL tables restored from " + dumpPath + " â€” dump file deleted.",
+    summary: "PostgreSQL tables restored from " + dumpPath + " --” dump file deleted.",
     error: null,
   };
 }
@@ -539,7 +539,7 @@ function escapeShellArg(arg: string): string {
 
 /**
  * Remove all temp artifacts from the .vibeguard/tmp/ directory.
- * Called as a safety measure â€” restore() already cleans individual artifacts,
+ * Called as a safety measure --” restore() already cleans individual artifacts,
  * but this ensures no stale files remain.
  */
 export function cleanup(): void {
@@ -552,7 +552,7 @@ export function cleanup(): void {
       try {
         fs.unlinkSync(path.join(tmpDir, file));
       } catch {
-        // Best-effort cleanup â€” individual files may already be gone.
+        // Best-effort cleanup --” individual files may already be gone.
       }
     }
   }

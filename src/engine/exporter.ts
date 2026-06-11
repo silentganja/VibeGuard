@@ -5,11 +5,11 @@
  * runnable integration test files to prevent future regressions.
  *
  * Design:
- *   · Framework-agnostic: supports Jest (Node/TS) and Bash (universal cURL).
- *   · Each generated test encodes the exact payload that broke the endpoint
+ *   - Framework-agnostic: supports Jest (Node/TS) and Bash (universal cURL).
+ *   - Each generated test encodes the exact payload that broke the endpoint
  *     and asserts the application now correctly rejects or sanitizes it.
- *   · Files written to the configured export_tests_dir with timestamped names.
- *   · Auto-staged via `git add` so the fix commit includes the regression test.
+ *   - Files written to the configured export_tests_dir with timestamped names.
+ *   - Auto-staged via `git add` so the fix commit includes the regression test.
  *
  * Zero runtime dependencies — uses Node.js built-ins and child_process.
  */

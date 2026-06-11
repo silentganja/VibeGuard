@@ -1,5 +1,5 @@
 /**
- * VibeGuard â€” CI/CD Environment Detection & Enterprise Configuration
+ * VibeGuard --” CI/CD Environment Detection & Enterprise Configuration
  *
  * Phase 9: Detects headless automation environments (GitHub Actions, GitLab CI,
  * Jenkins, CircleCI, etc.) and switches the engine into machine-readable,
@@ -7,10 +7,10 @@
  * fallback for environments where .vibeguard.json is not present.
  *
  * Design:
- *   Â· isHeadless() â€” inspects process environment for known CI flags.
- *   Â· readConfigFromEnv() â€” maps VIBE_* env vars to VibeGuardConfig.
- *   Â· getOutputMode() â€” returns "ci" or "terminal" for output formatting.
- *   Â· Zero runtime dependencies â€” uses only process.env inspection.
+ *   - isHeadless() --” inspects process environment for known CI flags.
+ *   - readConfigFromEnv() --” maps VIBE_* env vars to VibeGuardConfig.
+ *   - getOutputMode() --” returns "ci" or "terminal" for output formatting.
+ *   - Zero runtime dependencies --” uses only process.env inspection.
  */
 
 import type { VibeGuardConfig, DbType, LLMProvider } from "../core/types";
@@ -65,11 +65,11 @@ const ENTERPRISE_VALUE = "enterprise";
  *   3. The process has no TTY attached (stdin is not a terminal).
  *
  * When headless, VibeGuard will:
- *   Â· Skip interactive prompts (init wizard, config creation).
- *   Â· Disable ANSI color codes in output.
- *   Â· Output machine-readable text streams.
- *   Â· Not write to .git/hooks.
- *   Â· Bypass the Phase 7 patch viewer UI.
+ *   - Skip interactive prompts (init wizard, config creation).
+ *   - Disable ANSI color codes in output.
+ *   - Output machine-readable text streams.
+ *   - Not write to .git/hooks.
+ *   - Bypass the Phase 7 patch viewer UI.
  */
 export function isHeadless(): boolean {
   // Check explicit enterprise flag first (user override).
@@ -80,7 +80,7 @@ export function isHeadless(): boolean {
   // Check for known CI environment variables.
   for (const flag of CI_FLAGS) {
     if (process.env[flag]) {
-      // Some CI systems set CI=false â€” respect that.
+      // Some CI systems set CI=false --” respect that.
       if (flag === "CI" && process.env.CI === "false") {
         continue;
       }
@@ -99,8 +99,8 @@ export function isHeadless(): boolean {
 /**
  * Get the current output mode based on the execution environment.
  *
- *   "ci"       â€” Headless CI/CD pipeline; machine-readable, no ANSI colors.
- *   "terminal" â€” Local developer terminal; full ANSI UX, interactive.
+ *   "ci"       --” Headless CI/CD pipeline; machine-readable, no ANSI colors.
+ *   "terminal" --” Local developer terminal; full ANSI UX, interactive.
  */
 export function getOutputMode(): "ci" | "terminal" {
   return isHeadless() ? "ci" : "terminal";
@@ -170,7 +170,7 @@ const VALID_DB_TYPES = new Set<string>(["mysql", "postgresql", "sqlite", "none"]
  * Read VibeGuard configuration from environment variables.
  *
  * This is the CI/CD fallback when .vibeguard.json is not present.
- * All fields are optional â€” missing required fields will be caught by
+ * All fields are optional --” missing required fields will be caught by
  * the config validation step (validateConfig).
  *
  * Resolution matrix:

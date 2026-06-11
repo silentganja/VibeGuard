@@ -5,10 +5,10 @@
  * (post-Phase-2a) diff and caching LLM responses to the local filesystem.
  *
  * Design:
- *   · SHA-256 hash of the sanitized diff string — deterministic, fast, collision-resistant.
- *   · Cache entries stored as .vibeguard/cache/llm_<hash>.json in the project root.
- *   · Cache directory is .gitignore'd — never leaks into the repository.
- *   · Cache is optional; disabled when llm_cache_enabled is false or in CI mode.
+ *   - SHA-256 hash of the sanitized diff string — deterministic, fast, collision-resistant.
+ *   - Cache entries stored as .vibeguard/cache/llm_<hash>.json in the project root.
+ *   - Cache directory is .gitignore'd — never leaks into the repository.
+ *   - Cache is optional; disabled when llm_cache_enabled is false or in CI mode.
  *
  * Zero runtime dependencies — uses Node.js built-in crypto, fs, and path.
  */

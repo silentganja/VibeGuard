@@ -1,5 +1,5 @@
 /**
- * VibeGuard â€” Configuration Manager
+ * VibeGuard --” Configuration Manager
  *
  * Reads, writes, and validates `.vibeguard.json` at the project root.
  * The project root is discovered by walking upward from cwd until a `.git`
@@ -260,7 +260,7 @@ export function validateConfig(raw: Partial<VibeGuardConfig>): string[] {
 export function readConfig(root?: string): VibeGuardConfig {
   const headless = isHeadless();
 
-  // â”€â”€ Path 1: Headless CI/CD â€” use environment variables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ Path 1: Headless CI/CD --” use environment variables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (headless) {
     const envConfig = readConfigFromEnv();
 
@@ -278,7 +278,7 @@ export function readConfig(root?: string): VibeGuardConfig {
       if (missingFields.length > 0) {
         msg += `\n\nMissing required environment variables:\n`;
         for (const field of missingFields) {
-          msg += `  Â· ${field}\n`;
+          msg += `  - ${field}\n`;
         }
         msg += `\nSet these variables in your CI pipeline configuration.`;
       }
@@ -289,7 +289,7 @@ export function readConfig(root?: string): VibeGuardConfig {
     return merged as VibeGuardConfig;
   }
 
-  // â”€â”€ Path 2 & 3: Local â€” try filesystem config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ Path 2 & 3: Local --” try filesystem config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const projectRoot = root ?? findProjectRoot();
 
   const filePath = projectRoot
@@ -310,11 +310,11 @@ export function readConfig(root?: string): VibeGuardConfig {
           `Failed to read ${CONFIG_FILENAME}: ${(err as Error).message}`
         );
       }
-      // ENOENT â€” file doesn't exist. Fall through to env var check.
+      // ENOENT --” file doesn't exist. Fall through to env var check.
     }
   }
 
-  // â”€â”€ Path 3: No config file â€” try env vars as fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ Path 3: No config file --” try env vars as fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!fileExists) {
     const envConfig = readConfigFromEnv();
 
@@ -334,14 +334,14 @@ export function readConfig(root?: string): VibeGuardConfig {
       return merged as VibeGuardConfig;
     }
 
-    // No config file and insufficient env vars â€” cannot proceed.
+    // No config file and insufficient env vars --” cannot proceed.
     throw new Error(
       `No ${CONFIG_FILENAME} found and no ${ENV_KEYS.LLM_PROVIDER}/${ENV_KEYS.LLM_ENDPOINT}/${ENV_KEYS.LLM_KEY}/${ENV_KEYS.LLM_MODEL}/${ENV_KEYS.TARGET_URL} environment variables set.\n` +
       `Run \`vibeguard init\` to create a config file, or set the VIBE_* environment variables for CI/CD usage.`
     );
   }
 
-  // â”€â”€ Path 2: Config file exists â€” validate and return â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â”€â”€ Path 2: Config file exists --” validate and return â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new Error(`${CONFIG_FILENAME} must contain a JSON object.`);
   }
@@ -412,7 +412,7 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
     ui.warn(`${CONFIG_FILENAME} already exists. It will be overwritten.`);
   }
 
-  ui.header("VibeGuard Â· Configuration");
+  ui.header("VibeGuard - Configuration");
   ui.space();
   ui.muted("Press Enter to accept the default value shown in brackets.");
   ui.space();
@@ -550,7 +550,7 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
   if (errors.length > 0) {
     ui.fail("Configuration is invalid:");
     for (const err of errors) {
-      ui.muted(`  Â· ${err}`);
+      ui.muted(`  - ${err}`);
     }
     throw new Error("Aborted due to validation errors.");
   }
@@ -568,13 +568,13 @@ export async function initConfig(targetDir?: string): Promise<VibeGuardConfig> {
 /** Print the current config to stdout (for `vibeguard config`). */
 export function printConfig(): void {
   const config = readConfig();
-  ui.header("VibeGuard Â· Current Configuration");
+  ui.header("VibeGuard - Current Configuration");
   ui.space();
   ui.kv("Provider", config.llm_provider);
   ui.kv("Endpoint", config.llm_api_endpoint);
   ui.kv("API Key", config.llm_api_key.startsWith("$")
     ? `${config.llm_api_key} (env var)`
-    : "(literal â€” consider using $ENV_VAR)");
+    : "(literal --” consider using $ENV_VAR)");
   ui.kv("Model", config.llm_model);
   ui.kv("Target URL", config.target_local_url);
   ui.kv("Excluded", config.exclude_paths.join(", ") || "(none)");

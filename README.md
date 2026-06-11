@@ -4,7 +4,7 @@
 
 VibeGuard installs a pre-push Git hook that triggers automatically before every `git push`. It extracts your diff, sends it to your own LLM for adversarial analysis, fires live exploit payloads against your local dev server, judges the responses, generates security patches, exports regression tests, and alerts your team — all before the push leaves your machine.
 
-> **v1.1.0** · 32 source modules · 7 domain directories · Zero runtime dependencies · ~122 KB production bundle · **7 System Hardening Fixes**
+> **v1.1.0** - 32 source modules - 7 domain directories - Zero runtime dependencies - ~122 KB production bundle - **7 System Hardening Fixes**
 >
 > **⚠️ Model Requirement:** VibeGuard performs at **100% capability on unfiltered/uncensored AI models**. Filtered or safety-aligned models (RLHF-heavy, cloud-hosted) may refuse to generate exploit payloads, causing the red-team engine to fall back to deterministic defaults. For full adversarial coverage, use a local unfiltered model (Ollama + Llama 3 / Mistral).
 
@@ -338,7 +338,7 @@ vibeguard run --local "$BRANCH" --remote origin/main
 ```
 </details>
 
-**CI Environment Variables:** `VIBE_LLM_PROVIDER` · `VIBE_LLM_ENDPOINT` · `VIBE_LLM_KEY` · `VIBE_LLM_MODEL` · `VIBE_TARGET_URL` · `VIBE_EXCLUDE_PATHS` · `VIBE_WEBHOOK_SLACK` · `VIBE_WEBHOOK_DISCORD` · `VIBE_WEBHOOK_TEAMS` · `VIBE_DB_TYPE` · `VIBE_DB_HOST` · `VIBE_DB_PORT` · `VIBE_DB_USER` · `VIBE_DB_PASS` · `VIBE_DB_NAME` · `VIBE_DB_SQLITE_PATH`
+**CI Environment Variables:** `VIBE_LLM_PROVIDER` - `VIBE_LLM_ENDPOINT` - `VIBE_LLM_KEY` - `VIBE_LLM_MODEL` - `VIBE_TARGET_URL` - `VIBE_EXCLUDE_PATHS` - `VIBE_WEBHOOK_SLACK` - `VIBE_WEBHOOK_DISCORD` - `VIBE_WEBHOOK_TEAMS` - `VIBE_DB_TYPE` - `VIBE_DB_HOST` - `VIBE_DB_PORT` - `VIBE_DB_USER` - `VIBE_DB_PASS` - `VIBE_DB_NAME` - `VIBE_DB_SQLITE_PATH`
 
 ---
 
@@ -351,7 +351,7 @@ vibeguard run --local "$BRANCH" --remote origin/main
 
 Captures the exact changes about to be pushed via `git diff <merge-base>..HEAD` (two-dot, since the merge-base is pre-resolved). Strips non-functional noise — comments, doc blocks, CSS, lockfiles, whitespace — before sending to the LLM. File extension whitelist covers 50+ languages. Supports inline `@vibeguard-ignore <vector>` directives for suppressing false positives on intentionally dangerous but safe code. Outputs a token-optimized payload with a discarded-file audit trail and ignored-vector summary.
 
-📁 [`src/analyzer/git.ts`](src/analyzer/git.ts) · [`src/analyzer/parser.ts`](src/analyzer/parser.ts)
+📁 [`src/analyzer/git.ts`](src/analyzer/git.ts) - [`src/analyzer/parser.ts`](src/analyzer/parser.ts)
 </details>
 
 <details>
@@ -377,7 +377,7 @@ Dual-strategy URL mapping: traditional (file path → URL with public subfolder 
 
 **Server Lifetime Management (Fix #1):** If the health check fails, VibeGuard launches `server_start_command` as a detached child process (no 60s hang — works with `npm run dev`) and polls the health endpoint every second for up to 60s. After the pipeline completes, `server_stop_command` gracefully tears down the environment. No more "forgot to start Docker" push blocks.
 
-📁 [`src/analyzer/mapper.ts`](src/analyzer/mapper.ts) · [`src/infrastructure/checker.ts`](src/infrastructure/checker.ts)
+📁 [`src/analyzer/mapper.ts`](src/analyzer/mapper.ts) - [`src/infrastructure/checker.ts`](src/infrastructure/checker.ts)
 </details>
 
 <details>
@@ -403,7 +403,7 @@ Fires payloads in parallel against your local dev server with a configurable con
 
 **Dynamic Auth Token Seeding (Fix #2):** Before firing payloads, VibeGuard can negotiate a short-lived sandbox token via `token_generation_command` and inject it into every request as a Bearer token, custom header, cookie, or query parameter. Tokens are sanitized (trimmed, CR/LF rejected) before being placed in headers to prevent HTTP header injection. This ensures secured endpoints return meaningful vulnerability signals rather than false-negative 401s.
 
-📁 [`src/engine/runner.ts`](src/engine/runner.ts) · [`src/engine/assertion.ts`](src/engine/assertion.ts) · [`src/utils/http.ts`](src/utils/http.ts)
+📁 [`src/engine/runner.ts`](src/engine/runner.ts) - [`src/engine/assertion.ts`](src/engine/assertion.ts) - [`src/utils/http.ts`](src/utils/http.ts)
 </details>
 
 <details>
@@ -411,7 +411,7 @@ Fires payloads in parallel against your local dev server with a configurable con
 
 A "Hardened Systems Security Engineer" persona receives the exploit context (source file + payload + response signature) and produces a surgically precise code fix. Per-vector remediation guidelines: parameterized queries for SQLi, authorization checks for auth bypass, output escaping for XSS, argument arrays for RCE. LCS-based unified diff patches written to `.vibeguard/patches/` — **never auto-applied**, always reviewed.
 
-📁 [`src/engine/healer.ts`](src/engine/healer.ts) · [`src/utils/diff.ts`](src/utils/diff.ts)
+📁 [`src/engine/healer.ts`](src/engine/healer.ts) - [`src/utils/diff.ts`](src/utils/diff.ts)
 </details>
 
 <details>
@@ -443,7 +443,7 @@ Non-blocking JSON Lines logger writes execution metrics to `.vibeguard/logs/engi
 
 Detects 15 CI platforms automatically (GitHub Actions, GitLab CI, Jenkins, CircleCI, Azure DevOps, etc.). Switches to machine-readable output in headless mode. 17 `VIBE_*` environment variables provide full configuration without a config file. Hook installation and patch generation gracefully skip in CI.
 
-📁 [`src/compliance/ci.ts`](src/compliance/ci.ts) · [`src/compliance/compliance.ts`](src/compliance/compliance.ts)
+📁 [`src/compliance/ci.ts`](src/compliance/ci.ts) - [`src/compliance/compliance.ts`](src/compliance/compliance.ts)
 </details>
 
 <details>
@@ -451,7 +451,7 @@ Detects 15 CI platforms automatically (GitHub Actions, GitLab CI, Jenkins, Circl
 
 Repo-committed shell commands (`server_start_command`, `server_stop_command`, `token_generation_command`) are never executed until explicitly trusted. A SHA-256 fingerprint of the command set is computed; the first time commands are seen — or whenever they change — an interactive prompt requires the developer to approve them. Approvals are cached per-project in `~/.vibeguard/trusted.json` (outside the repo). In non-interactive contexts (git hooks, CI) untrusted commands fail closed instead of executing. Also applies to auth tokens: any token containing CR/LF is rejected before being placed in HTTP headers, preventing header injection.
 
-📁 [`src/core/trust.ts`](src/core/trust.ts) · [`src/utils/http.ts`](src/utils/http.ts)
+📁 [`src/core/trust.ts`](src/core/trust.ts) - [`src/utils/http.ts`](src/utils/http.ts)
 </details>
 
 <details>
@@ -459,7 +459,7 @@ Repo-committed shell commands (`server_start_command`, `server_stop_command`, `t
 
 5-stage build pipeline: dev artifact cleanup → type-check → esbuild bundle (single minified CJS, ~122 KB, Node 18+) → platform wrappers (Unix shell + Windows `.cmd`) → optional Node.js SEA native binaries (6 targets: linux/macos/win × x64/arm64). Post-install verification script validates Node version, Git availability, and permissions.
 
-📁 [`scripts/build.mjs`](scripts/build.mjs) · [`scripts/verify.mjs`](scripts/verify.mjs)
+📁 [`scripts/build.mjs`](scripts/build.mjs) - [`scripts/verify.mjs`](scripts/verify.mjs)
 </details>
 
 ---

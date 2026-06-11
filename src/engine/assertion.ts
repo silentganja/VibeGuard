@@ -11,7 +11,7 @@
  *      indicating the payload caused a server-side crash or unhandled exception.
  *
  *   2. Database Leak Assertion:
- *      The response body contains raw database error signatures â€” SQL syntax
+ *      The response body contains raw database error signatures --” SQL syntax
  *      errors, PDO exceptions, PostgreSQL query failures, SQLite warnings,
  *      or unhandled runtime stack traces. These indicate information disclosure
  *      and confirm injection vulnerabilities.
@@ -138,7 +138,7 @@ export function evaluateResponse(
   const verdicts: AssertionVerdict[] = [];
 
   if (statusCode === null) {
-    // Request completely failed â€” not a vulnerability, just a network error.
+    // Request completely failed --” not a vulnerability, just a network error.
     return verdicts;
   }
 
@@ -174,7 +174,7 @@ function checkStatusCode(
     return {
       triggered: true,
       category: "status_code",
-      detail: "Server returned HTTP 500 Internal Server Error â€” unhandled exception triggered by payload.",
+      detail: "Server returned HTTP 500 Internal Server Error --” unhandled exception triggered by payload.",
       matched_signature: "HTTP 500",
     };
   }
@@ -184,7 +184,7 @@ function checkStatusCode(
     return {
       triggered: true,
       category: "status_code",
-      detail: "Server returned HTTP 502 Bad Gateway â€” upstream service may have crashed due to payload.",
+      detail: "Server returned HTTP 502 Bad Gateway --” upstream service may have crashed due to payload.",
       matched_signature: "HTTP 502",
     };
   }
@@ -193,7 +193,7 @@ function checkStatusCode(
     return {
       triggered: true,
       category: "status_code",
-      detail: "Server returned HTTP 503 Service Unavailable â€” server may be overloaded or crashed.",
+      detail: "Server returned HTTP 503 Service Unavailable --” server may be overloaded or crashed.",
       matched_signature: "HTTP 503",
     };
   }
@@ -220,7 +220,7 @@ function checkDatabaseLeak(
       return {
         triggered: true,
         category: "database_leak",
-        detail: "Response body contains raw database error or stack trace â€” information disclosure confirming injection vulnerability.",
+        detail: "Response body contains raw database error or stack trace --” information disclosure confirming injection vulnerability.",
         matched_signature: excerpt,
       };
     }
@@ -256,7 +256,7 @@ function checkAuthBypass(
       return {
         triggered: true,
         category: "auth_bypass",
-        detail: "Auth bypass confirmed: HTTP 200 with privileged content â€” " + indicators.join("; "),
+        detail: "Auth bypass confirmed: HTTP 200 with privileged content --” " + indicators.join("; "),
         matched_signature: indicators[0],
       };
     }

@@ -3,18 +3,18 @@
  *
  * `.vibeguard.json` is committed to the repository, and several of its fields
  * are shell commands executed on the developer's machine:
- *   · server_start_command
- *   · server_stop_command
- *   · auth_seeding.token_generation_command
+ *   - server_start_command
+ *   - server_stop_command
+ *   - auth_seeding.token_generation_command
  *
  * Without a trust gate, anyone who can commit to a repo gets arbitrary code
  * execution on every teammate's machine on push. This module implements a
  * direnv-style "allow" flow:
  *
- *   · A SHA-256 fingerprint of the executable command set is computed.
- *   · The first time commands are seen — or whenever they change — the user
+ *   - A SHA-256 fingerprint of the executable command set is computed.
+ *   - The first time commands are seen — or whenever they change — the user
  *     must explicitly approve them before anything is executed.
- *   · Approvals are cached per project root in the user's home directory
+ *   - Approvals are cached per project root in the user's home directory
  *     (~/.vibeguard/trusted.json), never inside the repository.
  */
 
@@ -163,10 +163,10 @@ export async function promptTrust(
 /**
  * Gate used by the run pipeline before any config-defined command executes.
  *
- *   · No commands configured       → proceed.
- *   · Already approved (unchanged) → proceed.
- *   · Interactive TTY              → prompt the user.
- *   · Non-interactive (hooks/CI)   → fail closed with instructions to run
+ *   - No commands configured       → proceed.
+ *   - Already approved (unchanged) → proceed.
+ *   - Interactive TTY              → prompt the user.
+ *   - Non-interactive (hooks/CI)   → fail closed with instructions to run
  *                                    `vibeguard trust` once, manually.
  */
 export async function ensureTrusted(

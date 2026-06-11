@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * VibeGuard Â- CLI Entry Point
+ * VibeGuard - CLI Entry Point
  *
  * Commands:
- *   vibeguard init       Interactive config wizard â€” creates .vibeguard.json
+ *   vibeguard init       Interactive config wizard --” creates .vibeguard.json
  *   vibeguard install    Install the git pre-push hook into .git/hooks/
  *   vibeguard uninstall  Remove the VibeGuard pre-push hook
  *   vibeguard config     Print the current configuration
- *   vibeguard run        [internal] Called by the pre-push hook â€” extracts
+ *   vibeguard run        [internal] Called by the pre-push hook --” extracts
  *                        and prints the structured diff. Phase 2 will add
  *                        LLM analysis here.
  *
@@ -43,7 +43,7 @@ const VERSION = `VibeGuard v${CORE_VERSION}`;
 // â”€â”€â”€ Help Text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const USAGE = `
-${"\x1b[97m\x1b[1mVibeGuard\x1b[0m"} Â- CLI-native adversarial QA daemon
+${"\x1b[97m\x1b[1mVibeGuard\x1b[0m"} - CLI-native adversarial QA daemon
 
 ${"\x1b[90m"}Usage:${"\x1b[0m"}
   vibeguard ${"\x1b[97m"}<command>${"\x1b[0m"} [options]
@@ -180,18 +180,18 @@ async function handleTrust(): Promise<void> {
  * Internal command invoked by the pre-push hook.
  *
  * Full pipeline:
- *   0. Compliance checks â€” README + semantic commit message (Phase 5).
+ *   0. Compliance checks --” README + semantic commit message (Phase 5).
  *   1. Parse --local, --remote flags from the hook.
  *   2. Read the project config.
  *   3. Extract the raw git diff (Phase 1).
- *   4. Apply noise filter & token optimization (Phase 2 â€” parser).
- *   5. Verify local dev server is reachable (Phase 3 â€” checker).
- *   6. Send filtered payload to the configured LLM (Phase 2 â€” llm).
- *   7. Resolve endpoints to executable test URLs (Phase 3 â€” mapper).
- *   8. Capture database state snapshot (Phase 4 â€” dbGuard.capture).
- *   9. Generate adversarial payloads via LLM (Phase 5 â€” payloadGen).
- *  10. Fire payloads & analyze responses live (Phase 6 â€” runner + assertion).
- *  11. Restore database state (Phase 4 â€” dbGuard.restore).
+ *   4. Apply noise filter & token optimization (Phase 2 --” parser).
+ *   5. Verify local dev server is reachable (Phase 3 --” checker).
+ *   6. Send filtered payload to the configured LLM (Phase 2 --” llm).
+ *   7. Resolve endpoints to executable test URLs (Phase 3 --” mapper).
+ *   8. Capture database state snapshot (Phase 4 --” dbGuard.capture).
+ *   9. Generate adversarial payloads via LLM (Phase 5 --” payloadGen).
+ *  10. Fire payloads & analyze responses live (Phase 6 --” runner + assertion).
+ *  11. Restore database state (Phase 4 --” dbGuard.restore).
  *  12. Build pass/fail verdict and report findings.
  *  13. Exit 0 (pass) or 1 (block).
  */
@@ -224,7 +224,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
       ui.space();
       ui.rule();
       ui.header("Diff Summary");
-      ui.muted("  (no changes detected â€” nothing to push)");
+      ui.muted("  (no changes detected --” nothing to push)");
       ui.rule();
       ui.ok("VibeGuard analysis complete - no changes");
       process.exit(0);
@@ -252,7 +252,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
       ui.muted("");
       ui.muted("Filtered out (non-functional noise):");
       for (const d of filtered.discarded) {
-        ui.muted("  - " + d.path + " â€” " + d.reason);
+        ui.muted("  - " + d.path + " --” " + d.reason);
       }
     }
 
@@ -277,7 +277,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
     const config = readConfig();
 
     if (filtered.files.length === 0) {
-      // All changes were noise â€” no need to call the LLM or check server.
+      // All changes were noise --” no need to call the LLM or check server.
       ui.muted("All changes are non-functional (docs, styles, comments, whitespace).");
       ui.muted("No LLM analysis needed.");
       ui.ok("VibeGuard analysis complete - push allowed (no functional changes)");
@@ -297,7 +297,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
     const serverCheck = await checkServer(config);
 
     if (!serverCheck.reachable) {
-      // Fail fast â€” no point calling the LLM if the server is down.
+      // Fail fast --” no point calling the LLM if the server is down.
       // Spec requires: [VibeGuard Error] Local development server at <url> is unreachable.
       ui.space();
       ui.rule();
@@ -310,7 +310,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
       ui.muted("  - Is target_local_url correct in .vibeguard.json?");
       ui.muted("  - Check: " + config.target_local_url);
       ui.rule();
-      ui.fail("Push blocked â€” cannot verify changes without a running server");
+      ui.fail("Push blocked --” cannot verify changes without a running server");
       ui.muted("");
       ui.muted("To bypass (NOT RECOMMENDED):");
       ui.muted("  git push --no-verify");
@@ -423,7 +423,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
         }
       }
       if (!snapshot.success) {
-        ui.warn("  Warning: Snapshot had errors â€” " + (snapshot.error ?? "unknown"));
+        ui.warn("  Warning: Snapshot had errors --” " + (snapshot.error ?? "unknown"));
       }
       ui.ok("Database state captured (" + snapshot.strategy + ")");
     } else {
@@ -470,7 +470,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
       }
       ui.ok("Payload generation complete");
     } else {
-      ui.muted("  No payloads generated â€” no vulnerability vectors detected on any endpoint.");
+      ui.muted("  No payloads generated --” no vulnerability vectors detected on any endpoint.");
     }
 
     // â•â•â• Phase 6: Live Payload Execution & Response Analysis â•â•â•â•â•â•â•â•â•â•â•
@@ -527,13 +527,13 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
       ui.rule();
     } else {
       ui.space();
-      ui.muted("â”€ Phase 6 (Live Test Execution) skipped â€” no payloads to execute â”€");
+      ui.muted("â”€ Phase 6 (Live Test Execution) skipped --” no payloads to execute â”€");
     }
 
     // â•â•â• Phase 7: Self-Healing Patch Generation â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // When tests confirm vulnerabilities, call the LLM to generate
     // localized code fixes. Patches are written to .vibeguard/patches/
-    // for the developer to review â€” they are NEVER applied automatically.
+    // for the developer to review --” they are NEVER applied automatically.
     //
     // In CI/CD mode, patch generation is skipped: ephemeral build containers
     // have no use for local .patch files. The vulnerability breakdown is
@@ -567,7 +567,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
           );
         }
       } else {
-        ui.muted("  No patches generated â€” no associated source files found for vulnerable endpoints.");
+        ui.muted("  No patches generated --” no associated source files found for vulnerable endpoints.");
       }
       ui.rule();
     }
@@ -670,7 +670,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
         ui.muted("  (Emergency DB restore completed)");
       }
     } catch {
-      // Restore itself failed â€” nothing more we can do.
+      // Restore itself failed --” nothing more we can do.
     }
 
     // Fail closed: any error in the analysis pipeline blocks the push.
@@ -699,7 +699,7 @@ async function handleRun(flags: Record<string, string>): Promise<void> {
     }
 
     ui.rule();
-    ui.fail("Push blocked â€” analysis could not complete");
+    ui.fail("Push blocked --” analysis could not complete");
     ui.muted("");
     ui.muted("To bypass (NOT RECOMMENDED):");
     ui.muted("  git push --no-verify");

@@ -1,7 +1,7 @@
 /**
  * VibeGuard - Compliance Validator
  *
- * Runs at the very start of the pre-push pipeline â€” before any code analysis,
+ * Runs at the very start of the pre-push pipeline --” before any code analysis,
  * network calls, or database snapshots. Enforces two quality gates:
  *
  *   1. README Update Check:
@@ -16,7 +16,7 @@
  *      by a descriptive message.
  *
  * If either check fails, the push is aborted immediately with exit code 1.
- * These checks run locally and cost nothing â€” they prevent sloppy pushes from
+ * These checks run locally and cost nothing --” they prevent sloppy pushes from
  * ever reaching the LLM analysis stage.
  */
 
@@ -133,7 +133,7 @@ export function enforce(projectRoot: string): void {
   }
 
   ui.rule();
-  ui.fail("Push blocked â€” compliance checks must pass before analysis proceeds.");
+  ui.fail("Push blocked --” compliance checks must pass before analysis proceeds.");
   ui.muted("");
   ui.muted("To bypass (NOT RECOMMENDED):");
   ui.muted("  git push --no-verify");
@@ -210,7 +210,7 @@ function checkReadme(projectRoot: string): { ok: boolean; reason: string } {
     };
   }
 
-  // Check modification time â€” README should have been touched recently alongside code.
+  // Check modification time --” README should have been touched recently alongside code.
   try {
     const stat = fs.statSync(readmePath);
     const ageDays = (Date.now() - stat.mtimeMs) / (1000 * 60 * 60 * 24);
@@ -224,7 +224,7 @@ function checkReadme(projectRoot: string): { ok: boolean; reason: string } {
       };
     }
   } catch {
-    // Stat failed â€” ignore this sub-check.
+    // Stat failed --” ignore this sub-check.
   }
 
   return {
@@ -267,11 +267,11 @@ function checkCommitMessage(): { ok: boolean; reason: string } {
   // Extract the subject line (first line, strip any merge prefix).
   const subject = message.split("\n")[0].trim();
 
-  // Skip merge commits â€” they're auto-generated.
+  // Skip merge commits --” they're auto-generated.
   if (subject.startsWith("Merge ") || subject.startsWith("Merge branch ")) {
     return {
       ok: true,
-      reason: "Merge commit detected â€” semantic check skipped for auto-generated merge messages.",
+      reason: "Merge commit detected --” semantic check skipped for auto-generated merge messages.",
     };
   }
 
